@@ -1255,8 +1255,7 @@ function printReceipt() {
   state.orderItems.forEach((item) => {
     itemsHtml += `
       <div class="receipt-line">
-        <span>${item.icon || '☕'} ${item.name} x${item.quantity}</span>
-        <span>${formatMoney(Number(item.price || 0) * Number(item.quantity || 0))}</span>
+        <span>${item.name}</span>
       </div>
     `;
   });
@@ -1265,10 +1264,10 @@ function printReceipt() {
 
   receiptContent.innerHTML = `
     <div class="receipt-header">
-      <div class="receipt-title">☕ QUÁN NƯỚC</div>
-      <div style="font-size:0.85rem;">Địa chỉ: 123 Đường ABC, TP.HCM</div>
-      <div style="font-size:0.85rem;">SĐT: 0123 456 789</div>
-      <div class="receipt-table">🪑 ${state.selectedTable ? state.selectedTable.name : 'Bàn: -'}</div>
+      <div class="receipt-title">Khu Tổ Hợp Đương</div>
+      <div style="font-size:0.85rem;">Địa chỉ: 998/3 Quang Trung, Thông Tây Hội TP.HCM</div>
+      <div style="font-size:0.85rem;">SĐT: 0333 958 080</div>
+      <div class="receipt-table">Bàn: ${state.selectedTable ? state.selectedTable.name : '-'}</div>
       <div style="font-size:0.8rem;">Ngày: ${new Date().toLocaleString('vi-VN')}</div>
     </div>
     ${itemsHtml}
