@@ -70,8 +70,9 @@ function saveTablesToStorage() {
 async function hydrateStaticData() {
   try {
     const menuData = await apiRequest('/api/menu');
-    if (Array.isArray(menuData) && menuData.length) {
+    if (Array.isArray(menuData)) {
       window.cafeData.menuItems = menuData;
+      localStorage.setItem('cafeMenu', JSON.stringify(menuData));
     }
   } catch (error) {
     console.warn('API menu không khả dụng, dùng localStorage:', error);
@@ -103,6 +104,9 @@ async function hydrateStaticData() {
   } catch (error) {
     console.warn('Không thể đọc dữ liệu localStorage:', error);
   }
+
+  renderMenu();
+  renderMenuManagerList();
 }
 
 function getTableOrder(tableId) {
@@ -1023,8 +1027,8 @@ function showToast(message, type = 'info') {
   }, 2500);
 }
 
-function init() {
-  hydrateStaticData();
+async function init() {
+  await hydrateStaticData();
   syncTableStatuses();
   restorePersistedView();
 
