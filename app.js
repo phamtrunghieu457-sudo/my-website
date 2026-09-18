@@ -543,6 +543,25 @@ async function deleteMenuItem(itemId) {
   try {
     await apiRequest(`/api/menu/${itemId}`, { method: 'DELETE' });
   } catch (error) {
+    const errorText = error && error.message ? error.message : String(error || '');
+    const alreadyDeleted = errorText.includes('Không tìm thấy món cần xóa') || errorText.includes('Not Found');
+
+    if (alreadyDeleted) {
+      window.cafeData.menuItems = items.filter((item) => item.id !== itemId);
+      saveMenuToStorage();
+
+      renderMenu();
+      renderMenuManagerList();
+      updateOrderSummary();
+
+      const messageEl = document.getElementById('menuManagerMessage');
+      if (messageEl) {
+        messageEl.textContent = `Món "${itemToDelete.name}" đã được xóa trước đó.`;
+        messageEl.className = 'auth-message success';
+      }
+      return;
+    }
+
     console.error('Xóa món thất bại:', error);
     const messageEl = document.getElementById('menuManagerMessage');
     if (messageEl) {
