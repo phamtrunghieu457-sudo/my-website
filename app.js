@@ -1,5 +1,6 @@
-window.APP_CONFIG = window.APP_CONFIG || { API_BASE_URL: 'http://localhost:3001' };
-const API_BASE_URL = window.APP_CONFIG.API_BASE_URL || 'http://localhost:3001';
+const renderApiUrl = 'https://my-website-qpnq.onrender.com';
+window.APP_CONFIG = window.APP_CONFIG || { API_BASE_URL: renderApiUrl };
+const API_BASE_URL = window.APP_CONFIG.API_BASE_URL || renderApiUrl;
 
 const state = window.cafeState;
 const { formatMoney, getTotal } = window.cafeUtils;

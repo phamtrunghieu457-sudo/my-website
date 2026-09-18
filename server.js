@@ -6,12 +6,31 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/cafe_db';
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:5500',
+  'http://127.0.0.1:8080',
+  'https://phamtrunghieu457-sudo.github.io',
+  'https://phamtrunghieu457-sudo.github.io/my-website'
+];
+
 const pool = new Pool({
   connectionString,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 async function ensureSchema() {
