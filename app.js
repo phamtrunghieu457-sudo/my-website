@@ -517,6 +517,8 @@ async function addMenuItem() {
       window.cafeData.menuItems.push({ id: result.id, name, price, icon });
       saveMenuToStorage();
     }
+
+    await hydrateStaticData();
   } catch (error) {
     console.error('Thêm món thất bại:', error);
     messageEl.textContent = 'Thêm món thất bại. Vui lòng thử lại.';
@@ -583,6 +585,7 @@ async function deleteMenuItem(itemId) {
     saveTableOrder(state.selectedTable.id, state.orderItems);
   }
 
+  await hydrateStaticData();
   renderMenu();
   renderMenuManagerList();
   updateOrderSummary();
