@@ -40,21 +40,6 @@ async function ensureSchema() {
     status: 'empty'
   }));
 
-  const defaultMenu = [
-    { id: 1, name: 'Cà phê đen', price: 20000, icon: '☕' },
-    { id: 2, name: 'Cà phê sữa', price: 25000, icon: '🥛' },
-    { id: 3, name: 'Trà đào', price: 30000, icon: '🍑' },
-    { id: 4, name: 'Nước cam', price: 35000, icon: '🍊' },
-    { id: 5, name: 'Sinh tố bơ', price: 40000, icon: '🥑' },
-    { id: 6, name: 'Nước dừa', price: 25000, icon: '🥥' },
-    { id: 7, name: 'Trà sữa', price: 35000, icon: '🧋' },
-    { id: 8, name: 'Nước chanh', price: 20000, icon: '🍋' },
-    { id: 9, name: 'Soda', price: 22000, icon: '🥤' },
-    { id: 10, name: 'Nước suối', price: 10000, icon: '💧' },
-    { id: 11, name: 'Bạc xỉu', price: 28000, icon: '☕' },
-    { id: 12, name: 'Matcha đá xay', price: 45000, icon: '🍵' }
-  ];
-
   const client = await pool.connect();
 
   try {
@@ -130,15 +115,6 @@ async function ensureSchema() {
          VALUES ($1, $2, $3)
          ON CONFLICT (id) DO NOTHING`,
         [table.id, table.name, table.status]
-      );
-    }
-
-    for (const item of defaultMenu) {
-      await client.query(
-        `INSERT INTO menu_items (id, name, price, icon)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (id) DO NOTHING`,
-        [item.id, item.name, item.price, item.icon]
       );
     }
 
@@ -233,6 +209,17 @@ app.delete('/api/menu/:id', async (req, res) => {
     }
 
     return res.json({ success: true, deletedId: Number(id) });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/menu/reset', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM menu_items');
+    await pool.query('ALTER SEQUENCE menu_items_id_seq RESTART WITH 1');
+
+    return res.json({ success: true, message: 'Đã reset menu về rỗng' });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
