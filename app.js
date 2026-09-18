@@ -212,6 +212,62 @@ function toggleUserDropdown() {
   }
 }
 
+function addMenuGroupFromDropdown() {
+  const newName = window.prompt('Tên nhóm mới:', 'Trà');
+  if (!newName) return;
+
+  const value = addCategoryGroup(newName);
+  if (value) {
+    showToast(`Đã thêm nhóm "${value}"`, 'success');
+  }
+}
+
+function renameCurrentMenuCategoryFromDropdown() {
+  const current = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
+  const next = window.prompt('Tên nhóm mới:', current);
+  if (next === null) return;
+
+  const value = next.trim();
+  if (!value) {
+    showToast('Tên nhóm không được để trống.', 'error');
+    return;
+  }
+
+  renameMenuCategory(current, value)
+    .then(() => {
+      showToast(`Đã đổi nhóm "${current}" thành "${value}"`, 'success');
+    })
+    .catch((error) => {
+      showToast(error && error.message ? error.message : 'Không thể đổi tên nhóm.', 'error');
+    });
+}
+
+function deleteCurrentMenuCategoryFromDropdown() {
+  const current = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
+  const categories = getMenuCategories();
+  if (categories.length <= 1) {
+    showToast('Phải giữ ít nhất 1 nhóm menu.', 'error');
+    return;
+  }
+
+  const confirmed = window.confirm(`Bạn có chắc muốn xóa nhóm "${current}" không?`);
+  if (!confirmed) return;
+
+  deleteMenuCategory(current)
+    .then(() => {
+      showToast(`Đã xóa nhóm "${current}"`, 'success');
+    })
+    .catch((error) => {
+      showToast(error && error.message ? error.message : 'Không thể xóa nhóm.', 'error');
+    });
+}
+
+function openCurrentMenuManagerFromDropdown() {
+  const current = localStorage.getItem('cafeActiveMenuCategory') || getMenuCategories()[0] || 'Khác';
+  localStorage.setItem('cafeActiveMenuCategory', current);
+  openMenuManager(current);
+}
+
 function logout() {
   state.isLoggedIn = false;
   state.selectedTable = null;
@@ -484,21 +540,6 @@ function renderMenu() {
   const tabs = document.createElement('div');
   tabs.className = 'menu-tabs';
 
-  const addTabBtn = document.createElement('button');
-  addTabBtn.type = 'button';
-  addTabBtn.className = 'menu-tab menu-tab-add';
-  addTabBtn.textContent = '＋';
-  addTabBtn.title = 'Thêm nhóm mới';
-  addTabBtn.addEventListener('click', () => {
-    const newName = window.prompt('Tên nhóm mới:', 'Trà');
-    if (!newName) return;
-    const value = addCategoryGroup(newName);
-    if (value) {
-      showToast(`Đã thêm nhóm "${value}"`, 'success');
-    }
-  });
-  tabs.appendChild(addTabBtn);
-
   categories.forEach((category) => {
     const tabButton = document.createElement('button');
     tabButton.type = 'button';
@@ -510,55 +551,6 @@ function renderMenu() {
     });
     tabs.appendChild(tabButton);
   });
-
-  const editTabBtn = document.createElement('button');
-  editTabBtn.type = 'button';
-  editTabBtn.className = 'menu-tab menu-tab-edit';
-  editTabBtn.textContent = '✎';
-  editTabBtn.title = 'Sửa nhóm đang chọn';
-  editTabBtn.addEventListener('click', async () => {
-    const current = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
-    const next = window.prompt('Tên nhóm mới:', current);
-    if (next === null) return;
-    const value = next.trim();
-    if (!value) {
-      showToast('Tên nhóm không được để trống.', 'error');
-      return;
-    }
-
-    try {
-      await renameMenuCategory(current, value);
-      showToast(`Đã đổi nhóm "${current}" thành "${value}"`, 'success');
-    } catch (error) {
-      showToast(error && error.message ? error.message : 'Không thể đổi tên nhóm.', 'error');
-    }
-  });
-  tabs.appendChild(editTabBtn);
-
-  const deleteTabBtn = document.createElement('button');
-  deleteTabBtn.type = 'button';
-  deleteTabBtn.className = 'menu-tab menu-tab-delete';
-  deleteTabBtn.textContent = '−';
-  deleteTabBtn.title = 'Xóa nhóm đang chọn';
-  deleteTabBtn.addEventListener('click', async () => {
-    const current = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
-    const categories = getMenuCategories();
-    if (categories.length <= 1) {
-      showToast('Phải giữ ít nhất 1 nhóm menu.', 'error');
-      return;
-    }
-
-    const confirmed = window.confirm(`Bạn có chắc muốn xóa nhóm "${current}" không?`);
-    if (!confirmed) return;
-
-    try {
-      await deleteMenuCategory(current);
-      showToast(`Đã xóa nhóm "${current}"`, 'success');
-    } catch (error) {
-      showToast(error && error.message ? error.message : 'Không thể xóa nhóm.', 'error');
-    }
-  });
-  tabs.appendChild(deleteTabBtn);
 
   menuGrid.appendChild(tabs);
 
@@ -605,16 +597,6 @@ function renderMenu() {
 
   categoryBlock.appendChild(categoryGrid);
 
-  const adjustButton = document.createElement('button');
-  adjustButton.type = 'button';
-  adjustButton.className = 'menu-category-adjust';
-  adjustButton.textContent = 'Điều chỉnh';
-  adjustButton.addEventListener('click', () => {
-    localStorage.setItem('cafeActiveMenuCategory', selectedCategory);
-    openMenuManager(selectedCategory);
-  });
-
-  categoryBlock.appendChild(adjustButton);
   menuGrid.appendChild(categoryBlock);
 
   if (!categories.length) {
@@ -1382,7 +1364,22 @@ async function init() {
 
   const menuManagerBtn = document.getElementById('menuManagerBtn');
   if (menuManagerBtn) {
-    menuManagerBtn.addEventListener('click', openMenuManager);
+    menuManagerBtn.addEventListener('click', openCurrentMenuManagerFromDropdown);
+  }
+
+  const menuAddGroupBtn = document.getElementById('menuAddGroupBtn');
+  if (menuAddGroupBtn) {
+    menuAddGroupBtn.addEventListener('click', addMenuGroupFromDropdown);
+  }
+
+  const menuRenameGroupBtn = document.getElementById('menuRenameGroupBtn');
+  if (menuRenameGroupBtn) {
+    menuRenameGroupBtn.addEventListener('click', renameCurrentMenuCategoryFromDropdown);
+  }
+
+  const menuDeleteGroupBtn = document.getElementById('menuDeleteGroupBtn');
+  if (menuDeleteGroupBtn) {
+    menuDeleteGroupBtn.addEventListener('click', deleteCurrentMenuCategoryFromDropdown);
   }
 
   const adminDashboardBtn = document.getElementById('adminDashboardBtn');
