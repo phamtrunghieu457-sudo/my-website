@@ -1,30 +1,20 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
-const dbDir = path.join(__dirname, 'database');
-const dbPath = path.join(dbDir, 'cafe.db');
+const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/cafe_db';
 
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Không thể mở database:', err.message);
-    process.exit(1);
-  }
-  console.log('Đã kết nối SQLite:', dbPath);
+const pool = new Pool({
+  connectionString,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-function seedInitialData() {
+async function ensureSchema() {
   const defaultTables = Array.from({ length: 18 }, (_, index) => ({
     id: index + 1,
     name: `Bàn ${index + 1}`,
@@ -46,265 +36,285 @@ function seedInitialData() {
     { id: 12, name: 'Matcha đá xay', price: 45000, icon: '🍵' }
   ];
 
-  db.serialize(() => {
-    db.run(`
+  const client = await pool.connect();
+
+  try {
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT,
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
         role TEXT DEFAULT 'admin'
       )
     `);
 
-    db.run(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS menu_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        price INTEGER,
-        icon TEXT
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        price INTEGER NOT NULL,
+        icon TEXT DEFAULT '☕'
       )
     `);
 
-    db.run(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS tables (
         id INTEGER PRIMARY KEY,
-        name TEXT,
+        name TEXT NOT NULL,
         status TEXT DEFAULT 'empty'
       )
     `);
 
-    db.run(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        table_id INTEGER,
-        table_name TEXT,
-        total INTEGER,
+        id SERIAL PRIMARY KEY,
+        table_id INTEGER NOT NULL,
+        table_name TEXT NOT NULL,
+        total INTEGER NOT NULL,
         status TEXT DEFAULT 'pending',
-        created_at TEXT
+        created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
-    db.run(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS order_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_id INTEGER,
-        item_id INTEGER,
-        name TEXT,
-        icon TEXT,
-        price INTEGER,
-        quantity INTEGER,
-        note TEXT
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        icon TEXT DEFAULT '☕',
+        price INTEGER NOT NULL,
+        quantity INTEGER NOT NULL,
+        note TEXT DEFAULT ''
       )
     `);
 
-    db.run(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS payments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_id INTEGER,
-        method TEXT,
-        amount INTEGER,
-        created_at TEXT
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL,
+        method TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
-    db.run(`INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', '123456', 'admin')`);
+    await client.query(
+      `INSERT INTO users (username, password, role)
+       VALUES ('admin', '123456', 'admin')
+       ON CONFLICT (username) DO NOTHING`
+    );
 
-    defaultTables.forEach((table) => {
-      db.run(
-        'INSERT OR IGNORE INTO tables (id, name, status) VALUES (?, ?, ?)',
+    for (const table of defaultTables) {
+      await client.query(
+        `INSERT INTO tables (id, name, status)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (id) DO NOTHING`,
         [table.id, table.name, table.status]
       );
-    });
+    }
 
-    defaultMenu.forEach((item) => {
-      db.run(
-        'INSERT OR IGNORE INTO menu_items (id, name, price, icon) VALUES (?, ?, ?, ?)',
+    for (const item of defaultMenu) {
+      await client.query(
+        `INSERT INTO menu_items (id, name, price, icon)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO NOTHING`,
         [item.id, item.name, item.price, item.icon]
       );
-    });
-  });
+    }
+
+    console.log('PostgreSQL schema ready');
+  } finally {
+    client.release();
+  }
 }
 
-seedInitialData();
+async function testConnection() {
+  try {
+    await pool.query('SELECT 1');
+    console.log('Đã kết nối PostgreSQL');
+    await ensureSchema();
+  } catch (error) {
+    console.error('Không thể kết nối PostgreSQL:', error.message);
+    process.exit(1);
+  }
+}
 
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, message: 'Database cafe đang hoạt động' });
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, message: 'Database cafe đang hoạt động' });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
 
-  db.get(
-    'SELECT * FROM users WHERE username = ? AND password = ?',
-    [username, password],
-    (err, row) => {
-      if (err) {
-        return res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
-      }
+  try {
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND password = $2',
+      [username, password]
+    );
 
-      if (!row) {
-        return res.status(401).json({ success: false, message: 'Sai tài khoản hoặc mật khẩu' });
-      }
-
-      return res.json({
-        success: true,
-        user: { id: row.id, username: row.username, role: row.role }
-      });
+    const row = result.rows[0];
+    if (!row) {
+      return res.status(401).json({ success: false, message: 'Sai tài khoản hoặc mật khẩu' });
     }
-  );
+
+    return res.json({
+      success: true,
+      user: { id: row.id, username: row.username, role: row.role }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+  }
 });
 
-app.get('/api/menu', (req, res) => {
-  db.all('SELECT * FROM menu_items ORDER BY id ASC', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    return res.json(rows);
-  });
+app.get('/api/menu', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM menu_items ORDER BY id ASC');
+    return res.json(result.rows);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/api/menu', (req, res) => {
+app.post('/api/menu', async (req, res) => {
   const { name, price, icon } = req.body;
 
   if (!name || !Number.isFinite(Number(price)) || Number(price) <= 0) {
     return res.status(400).json({ error: 'Tên và giá món không hợp lệ' });
   }
 
-  db.run(
-    'INSERT INTO menu_items (name, price, icon) VALUES (?, ?, ?)',
-    [name, Number(price), icon || '☕'],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      return res.json({ id: this.lastID, name, price: Number(price), icon: icon || '☕' });
-    }
-  );
+  try {
+    const result = await pool.query(
+      'INSERT INTO menu_items (name, price, icon) VALUES ($1, $2, $3) RETURNING *',
+      [name, Number(price), icon || '☕']
+    );
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.delete('/api/menu/:id', (req, res) => {
+app.delete('/api/menu/:id', async (req, res) => {
   const { id } = req.params;
 
-  db.run('DELETE FROM menu_items WHERE id = ?', [id], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+  try {
+    const result = await pool.query('DELETE FROM menu_items WHERE id = $1 RETURNING *', [id]);
 
-    if (this.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Không tìm thấy món cần xóa' });
     }
 
     return res.json({ success: true, deletedId: Number(id) });
-  });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.get('/api/tables', (req, res) => {
-  db.all('SELECT * FROM tables ORDER BY id ASC', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    return res.json(rows);
-  });
+app.get('/api/tables', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM tables ORDER BY id ASC');
+    return res.json(result.rows);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   const { tableId, tableName, items, total } = req.body;
 
   if (!tableId || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Dữ liệu đơn hàng không hợp lệ' });
   }
 
-  const createdAt = new Date().toISOString();
+  const client = await pool.connect();
 
-  db.run(
-    'INSERT INTO orders (table_id, table_name, total, status, created_at) VALUES (?, ?, ?, ?, ?)',
-    [tableId, tableName, Number(total), 'pending', createdAt],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+  try {
+    await client.query('BEGIN');
 
-      const orderId = this.lastID;
-      const insertItem = (item) => new Promise((resolve, reject) => {
-        db.run(
-          'INSERT INTO order_items (order_id, item_id, name, icon, price, quantity, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [orderId, item.id, item.name, item.icon || '☕', item.price, item.quantity, item.note || ''],
-          (innerErr) => {
-            if (innerErr) reject(innerErr);
-            else resolve();
-          }
-        );
-      });
+    const orderResult = await client.query(
+      'INSERT INTO orders (table_id, table_name, total, status, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING id',
+      [Number(tableId), tableName, Number(total), 'pending']
+    );
 
-      Promise.all(items.map(insertItem))
-        .then(() => {
-          return res.json({
-            success: true,
-            orderId,
-            message: 'Đơn hàng đã được lưu vào database'
-          });
-        })
-        .catch((error) => {
-          return res.status(500).json({ error: error.message });
-        });
+    const orderId = orderResult.rows[0].id;
+
+    for (const item of items) {
+      await client.query(
+        'INSERT INTO order_items (order_id, item_id, name, icon, price, quantity, note) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [orderId, item.id, item.name, item.icon || '☕', Number(item.price), Number(item.quantity || 1), item.note || '']
+      );
     }
-  );
+
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      orderId,
+      message: 'Đơn hàng đã được lưu vào database'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
 });
 
-app.get('/api/orders', (req, res) => {
-  db.all('SELECT * FROM orders ORDER BY created_at DESC', (err, orders) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+app.get('/api/orders', async (req, res) => {
+  try {
+    const ordersResult = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+    const orders = ordersResult.rows;
 
-    const orderPromises = orders.map((order) => new Promise((resolve) => {
-      db.all('SELECT * FROM order_items WHERE order_id = ?', [order.id], (innerErr, items) => {
-        if (innerErr) {
-          resolve({ ...order, items: [] });
-          return;
-        }
-        resolve({ ...order, items });
-      });
+    const result = await Promise.all(orders.map(async (order) => {
+      const itemsResult = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
+      return { ...order, items: itemsResult.rows };
     }));
 
-    Promise.all(orderPromises)
-      .then((result) => res.json(result))
-      .catch((error) => res.status(500).json({ error: error.message }));
-  });
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.get('/api/revenue', (req, res) => {
-  db.get('SELECT COALESCE(SUM(amount), 0) AS total FROM payments', (err, row) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-
-    return res.json({ total: Number(row?.total || 0) });
-  });
+app.get('/api/revenue', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT COALESCE(SUM(amount), 0) AS total FROM payments');
+    return res.json({ total: Number(result.rows[0]?.total || 0) });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.get('/api/revenue-by-day', (req, res) => {
-  db.all(
-    `SELECT date(created_at) AS date, COALESCE(SUM(amount), 0) AS total
-     FROM payments
-     GROUP BY date(created_at)
-     ORDER BY date(created_at) ASC`,
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+app.get('/api/revenue-by-day', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') AS date, COALESCE(SUM(amount), 0) AS total
+       FROM payments
+       GROUP BY created_at::date
+       ORDER BY created_at::date ASC`
+    );
 
-      const points = (rows || []).map((row) => ({
-        date: row.date,
-        total: Number(row.total || 0)
-      }));
+    const points = (result.rows || []).map((row) => ({
+      date: row.date,
+      total: Number(row.total || 0)
+    }));
 
-      return res.json({ points });
-    }
-  );
+    return res.json({ points });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.put('/api/tables/:id/status', (req, res) => {
+app.put('/api/tables/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -312,54 +322,62 @@ app.put('/api/tables/:id/status', (req, res) => {
     return res.status(400).json({ error: 'Thiếu trạng thái bàn' });
   }
 
-  db.run('UPDATE tables SET status = ? WHERE id = ?', [status, id], function (err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
+  try {
+    const result = await pool.query(
+      'UPDATE tables SET status = $1 WHERE id = $2 RETURNING *',
+      [status, Number(id)]
+    );
 
-    if (this.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Không tìm thấy bàn' });
     }
 
     return res.json({ success: true, tableId: Number(id), status });
-  });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
-app.delete('/api/orders/:id', (req, res) => {
+app.delete('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
+  const client = await pool.connect();
 
-  db.run('DELETE FROM order_items WHERE order_id = ?', [id], (err) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM order_items WHERE order_id = $1', [Number(id)]);
+    const result = await client.query('DELETE FROM orders WHERE id = $1 RETURNING id', [Number(id)]);
+    await client.query('COMMIT');
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
     }
 
-    db.run('DELETE FROM orders WHERE id = ?', [id], function (deleteErr) {
-      if (deleteErr) {
-        return res.status(500).json({ error: deleteErr.message });
-      }
-
-      return res.json({ success: true, deletedOrderId: Number(id) });
-    });
-  });
+    return res.json({ success: true, deletedOrderId: Number(id) });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
 });
 
-app.post('/api/payments', (req, res) => {
+app.post('/api/payments', async (req, res) => {
   const { orderId, method, amount } = req.body;
 
   if (!orderId || !method || !Number.isFinite(Number(amount))) {
     return res.status(400).json({ error: 'Dữ liệu thanh toán không hợp lệ' });
   }
 
-  db.run(
-    'INSERT INTO payments (order_id, method, amount, created_at) VALUES (?, ?, ?, ?)',
-    [orderId, method, Number(amount), new Date().toISOString()],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      return res.json({ success: true, id: this.lastID });
-    }
-  );
+  try {
+    const result = await pool.query(
+      'INSERT INTO payments (order_id, method, amount, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+      [Number(orderId), method, Number(amount)]
+    );
+
+    return res.json({ success: true, id: result.rows[0].id });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 app.get('/', (req, res) => {
@@ -369,6 +387,8 @@ app.get('/', (req, res) => {
     apiBase: `http://localhost:${PORT}`
   });
 });
+
+testConnection();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API server đang chạy tại http://0.0.0.0:${PORT}`);
