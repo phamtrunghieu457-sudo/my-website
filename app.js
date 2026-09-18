@@ -82,6 +82,21 @@ function saveMenuCategories(categories) {
   localStorage.setItem('cafeMenuCategories', JSON.stringify(categories));
 }
 
+function addCategoryGroup(categoryName) {
+  const value = String(categoryName || '').trim();
+  if (!value) return null;
+
+  const categories = getMenuCategories();
+  if (!categories.includes(value)) {
+    categories.push(value);
+    saveMenuCategories(categories);
+  }
+
+  localStorage.setItem('cafeActiveMenuCategory', value);
+  renderMenu();
+  return value;
+}
+
 function saveTablesToStorage() {
   localStorage.setItem('cafeTables', JSON.stringify(getTables()));
 }
@@ -451,25 +466,105 @@ function renderMenu() {
   menuGrid.innerHTML = '';
   const items = getMenuItems();
   const categories = getMenuCategories();
+  const activeCategory = localStorage.getItem('cafeActiveMenuCategory') || categories[0] || 'Khác';
+  const selectedCategory = categories.includes(activeCategory) ? activeCategory : (categories[0] || 'Khác');
+  localStorage.setItem('cafeActiveMenuCategory', selectedCategory);
+
+  const tabs = document.createElement('div');
+  tabs.className = 'menu-tabs';
+
+  const addTabBtn = document.createElement('button');
+  addTabBtn.type = 'button';
+  addTabBtn.className = 'menu-tab menu-tab-add';
+  addTabBtn.textContent = '＋';
+  addTabBtn.title = 'Thêm nhóm mới';
+  addTabBtn.addEventListener('click', () => {
+    const newName = window.prompt('Tên nhóm mới:', 'Trà');
+    if (!newName) return;
+    const value = addCategoryGroup(newName);
+    if (value) {
+      showToast(`Đã thêm nhóm "${value}"`, 'success');
+    }
+  });
+  tabs.appendChild(addTabBtn);
 
   categories.forEach((category) => {
-    const categoryItems = items.filter((item) => (item.category || 'Khác') === category);
-    if (!categoryItems.length) return;
+    const tabButton = document.createElement('button');
+    tabButton.type = 'button';
+    tabButton.className = `menu-tab ${category === selectedCategory ? 'active' : ''}`;
+    tabButton.textContent = category;
+    tabButton.addEventListener('click', () => {
+      localStorage.setItem('cafeActiveMenuCategory', category);
+      renderMenu();
+    });
+    tabs.appendChild(tabButton);
+  });
 
-    const categoryBlock = document.createElement('div');
-    categoryBlock.className = 'menu-category-block';
+  const deleteTabBtn = document.createElement('button');
+  deleteTabBtn.type = 'button';
+  deleteTabBtn.className = 'menu-tab menu-tab-delete';
+  deleteTabBtn.textContent = '−';
+  deleteTabBtn.title = 'Xóa nhóm đang chọn';
+  deleteTabBtn.addEventListener('click', () => {
+    const current = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
+    const categories = getMenuCategories();
+    if (categories.length <= 1) {
+      showToast('Phải giữ ít nhất 1 nhóm menu.', 'error');
+      return;
+    }
 
-    const categoryTitle = document.createElement('h3');
-    categoryTitle.className = 'menu-category-title';
-    categoryTitle.textContent = category;
-    categoryBlock.appendChild(categoryTitle);
+    const confirmed = window.confirm(`Bạn có chắc muốn xóa nhóm "${current}" không?`);
+    if (!confirmed) return;
 
-    const categoryGrid = document.createElement('div');
-    categoryGrid.className = 'menu-grid-inner';
+    const remaining = categories.filter((item) => item !== current);
+    saveMenuCategories(remaining);
 
+    const fallback = remaining[0] || 'Khác';
+    localStorage.setItem('cafeActiveMenuCategory', fallback);
+
+    const menuItems = getMenuItems().filter((item) => (item.category || 'Khác') !== current);
+    window.cafeData.menuItems = menuItems;
+    localStorage.setItem('cafeMenu', JSON.stringify(menuItems));
+
+    renderMenu();
+    renderMenuManagerList();
+    showToast(`Đã xóa nhóm "${current}"`, 'success');
+  });
+  tabs.appendChild(deleteTabBtn);
+
+  menuGrid.appendChild(tabs);
+
+  const categoryItems = items.filter((item) => (item.category || 'Khác') === selectedCategory);
+  const categoryBlock = document.createElement('div');
+  categoryBlock.className = 'menu-category-block';
+
+  const categoryHeader = document.createElement('div');
+  categoryHeader.className = 'menu-category-header';
+
+  const categoryTitle = document.createElement('div');
+  categoryTitle.className = 'menu-category-title';
+  categoryTitle.textContent = selectedCategory;
+
+  const categoryCount = document.createElement('span');
+  categoryCount.className = 'menu-category-count';
+  categoryCount.textContent = `${categoryItems.length} món`;
+
+  categoryHeader.appendChild(categoryTitle);
+  categoryHeader.appendChild(categoryCount);
+  categoryBlock.appendChild(categoryHeader);
+
+  const categoryGrid = document.createElement('div');
+  categoryGrid.className = 'menu-grid-inner';
+
+  if (!categoryItems.length) {
+    const emptyState = document.createElement('div');
+    emptyState.className = 'menu-category-empty';
+    emptyState.textContent = 'Chưa có món trong nhóm này';
+    categoryGrid.appendChild(emptyState);
+  } else {
     categoryItems.forEach((item) => {
       const div = document.createElement('div');
-      div.className = 'menu-item';
+      div.className = 'menu-item menu-item-compact';
       div.innerHTML = `
         <div class="drink-icon">${item.icon || '☕'}</div>
         <div class="drink-name">${item.name}</div>
@@ -478,12 +573,23 @@ function renderMenu() {
       div.addEventListener('click', () => addToOrder(item));
       categoryGrid.appendChild(div);
     });
+  }
 
-    categoryBlock.appendChild(categoryGrid);
-    menuGrid.appendChild(categoryBlock);
+  categoryBlock.appendChild(categoryGrid);
+
+  const adjustButton = document.createElement('button');
+  adjustButton.type = 'button';
+  adjustButton.className = 'menu-category-adjust';
+  adjustButton.textContent = 'Điều chỉnh';
+  adjustButton.addEventListener('click', () => {
+    localStorage.setItem('cafeActiveMenuCategory', selectedCategory);
+    openMenuManager(selectedCategory);
   });
 
-  if (!menuGrid.children.length) {
+  categoryBlock.appendChild(adjustButton);
+  menuGrid.appendChild(categoryBlock);
+
+  if (!categories.length) {
     menuGrid.innerHTML = '<div class="bill-empty">Chưa có món nào trong menu.</div>';
   }
 }
@@ -517,11 +623,32 @@ function renderMenuManagerList() {
   });
 }
 
-function openMenuManager() {
+function openMenuManager(categoryName = null) {
   const modal = document.getElementById('menuManagerModal');
   if (!modal) return;
   renderMenuManagerList();
   modal.classList.add('active');
+
+  if (categoryName) {
+    localStorage.setItem('cafeActiveMenuCategory', categoryName);
+  }
+
+  const categoryInput = document.getElementById('newDrinkCategory');
+  if (categoryInput) {
+    const current = categoryName || localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
+    categoryInput.value = current;
+    setTimeout(() => {
+      categoryInput.focus();
+      categoryInput.select();
+    }, 50);
+  } else {
+    const nameInput = document.getElementById('newDrinkName');
+    if (nameInput) {
+      setTimeout(() => {
+        nameInput.focus();
+      }, 50);
+    }
+  }
 }
 
 function closeMenuManager() {
@@ -539,15 +666,14 @@ async function addMenuItem() {
   const nameInput = document.getElementById('newDrinkName');
   const priceInput = document.getElementById('newDrinkPrice');
   const iconInput = document.getElementById('newDrinkIcon');
-  const categoryInput = document.getElementById('newDrinkCategory');
   const messageEl = document.getElementById('menuManagerMessage');
 
-  if (!nameInput || !priceInput || !iconInput || !categoryInput || !messageEl) return;
+  if (!nameInput || !priceInput || !iconInput || !messageEl) return;
 
   const name = nameInput.value.trim();
   const price = Number(priceInput.value);
   const icon = iconInput.value.trim() || '☕';
-  const category = categoryInput.value.trim() || 'Khác';
+  const category = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
 
   if (!name || !Number.isFinite(price) || price <= 0) {
     messageEl.textContent = 'Vui lòng nhập tên và giá món hợp lệ.';
@@ -575,7 +701,8 @@ async function addMenuItem() {
     await hydrateStaticData();
   } catch (error) {
     console.error('Thêm món thất bại:', error);
-    messageEl.textContent = 'Thêm món thất bại. Vui lòng thử lại.';
+    const detail = error && error.message ? error.message : 'Vui lòng thử lại.';
+    messageEl.textContent = `Thêm món thất bại: ${detail}`;
     messageEl.className = 'auth-message error';
     return;
   }
@@ -586,7 +713,6 @@ async function addMenuItem() {
   nameInput.value = '';
   priceInput.value = '';
   iconInput.value = '';
-  categoryInput.value = '';
 
   messageEl.textContent = 'Đã thêm món mới!';
   messageEl.className = 'auth-message success';
@@ -1151,32 +1277,6 @@ async function init() {
   const addDrinkBtn = document.getElementById('addDrinkBtn');
   if (addDrinkBtn) {
     addDrinkBtn.addEventListener('click', addMenuItem);
-  }
-
-  const addCategoryBtn = document.getElementById('addCategoryBtn');
-  if (addCategoryBtn) {
-    addCategoryBtn.addEventListener('click', () => {
-      const input = document.getElementById('newDrinkCategory');
-      const messageEl = document.getElementById('menuManagerMessage');
-      if (!input || !messageEl) return;
-
-      const value = input.value.trim();
-      if (!value) {
-        messageEl.textContent = 'Vui lòng nhập tên nhóm.';
-        messageEl.className = 'auth-message error';
-        return;
-      }
-
-      const categories = getMenuCategories();
-      if (!categories.includes(value)) {
-        categories.push(value);
-        saveMenuCategories(categories);
-      }
-
-      input.value = value;
-      messageEl.textContent = `Đã thêm nhóm "${value}"!`;
-      messageEl.className = 'auth-message success';
-    });
   }
 
   const dailyRevenueBtn = document.getElementById('dailyRevenueBtn');
