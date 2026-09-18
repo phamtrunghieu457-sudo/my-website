@@ -198,6 +198,20 @@ function updateUserMenuVisibility() {
   updateRevenueDisplay();
 }
 
+async function syncRevenueFromServer() {
+  try {
+    const result = await apiRequest('/api/revenue');
+    const total = Number(result?.total || 0);
+    if (Number.isFinite(total)) {
+      state.totalRevenue = total;
+      persistCafeState();
+      updateRevenueDisplay();
+    }
+  } catch (error) {
+    console.warn('Không thể đồng bộ doanh thu từ DB:', error);
+  }
+}
+
 function updateRevenueDisplay() {
   const revenueValue = document.getElementById('revenueValue');
   if (revenueValue) {
@@ -405,7 +419,16 @@ function renderDailyRevenueChart(points = []) {
   });
 }
 
-function loadDailyRevenueChart() {
+async function loadDailyRevenueChart() {
+  try {
+    const data = await apiRequest('/api/revenue-by-day');
+    const points = Array.isArray(data?.points) && data.points.length ? data.points : buildDailyRevenuePoints();
+    renderDailyRevenueChart(points);
+    return;
+  } catch (error) {
+    console.warn('Không thể lấy doanh thu theo ngày từ API, dùng dữ liệu local:', error);
+  }
+
   renderDailyRevenueChart(buildDailyRevenuePoints());
 }
 
@@ -1104,6 +1127,15 @@ async function confirmPayment() {
   const paidAmount = getTotal(state.orderItems);
   state.totalRevenue += paidAmount;
 
+  try {
+    await apiRequest('/api/revenue', {
+      method: 'POST',
+      body: JSON.stringify({ total: paidAmount })
+    });
+  } catch (error) {
+    console.warn('Không thể lưu tổng doanh thu vào DB:', error);
+  }
+
   if (state.selectedTable) {
     try {
       const orderPayload = {
@@ -1181,9 +1213,11 @@ function updateBillHistory() {
   if (revenueEl) revenueEl.textContent = formatMoney(state.totalRevenue);
 }
 
-function openAdminDashboard() {
+async function openAdminDashboard() {
   const modal = document.getElementById('adminDashboardModal');
   if (!modal) return;
+
+  await syncRevenueFromServer();
 
   const revenueEl = document.getElementById('adminTotalRevenue');
   const billCountEl = document.getElementById('adminBillCount');
@@ -1217,7 +1251,7 @@ function openAdminDashboard() {
     }
   }
 
-  loadDailyRevenueChart();
+  await loadDailyRevenueChart();
   modal.classList.add('active');
 }
 
@@ -1313,6 +1347,7 @@ async function init() {
   await hydrateStaticData();
   syncTableStatuses();
   restorePersistedView();
+  await syncRevenueFromServer();
 
   const savedLogin = localStorage.getItem('cafeLoggedIn') === 'true';
   if (savedLogin) {

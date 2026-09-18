@@ -109,6 +109,20 @@ async function ensureSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS revenue_summary (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        total INTEGER NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(
+      `INSERT INTO revenue_summary (id, total, updated_at)
+       VALUES (1, 0, NOW())
+       ON CONFLICT (id) DO NOTHING`
+    );
+
     await client.query(
       `INSERT INTO users (username, password, role)
        VALUES ('admin', '123456', 'admin')
@@ -364,8 +378,38 @@ app.get('/api/orders', async (req, res) => {
 
 app.get('/api/revenue', async (req, res) => {
   try {
-    const result = await pool.query('SELECT COALESCE(SUM(amount), 0) AS total FROM payments');
-    return res.json({ total: Number(result.rows[0]?.total || 0) });
+    const summaryResult = await pool.query('SELECT total FROM revenue_summary WHERE id = 1');
+    if (summaryResult.rows[0]) {
+      return res.json({ total: Number(summaryResult.rows[0].total || 0) });
+    }
+
+    const paymentResult = await pool.query('SELECT COALESCE(SUM(amount), 0) AS total FROM payments');
+    return res.json({ total: Number(paymentResult.rows[0]?.total || 0) });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/revenue', async (req, res) => {
+  const { total } = req.body;
+  const revenueAmount = Number(total);
+
+  if (!Number.isFinite(revenueAmount) || revenueAmount <= 0) {
+    return res.status(400).json({ error: 'Tổng tiền không hợp lệ' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO revenue_summary (id, total, updated_at)
+       VALUES (1, $1, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         total = revenue_summary.total + EXCLUDED.total,
+         updated_at = NOW()
+       RETURNING *`,
+      [revenueAmount]
+    );
+
+    return res.json({ success: true, total: Number(result.rows[0].total || 0) });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
