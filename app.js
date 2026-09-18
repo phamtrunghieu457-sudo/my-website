@@ -514,10 +514,10 @@ async function addMenuItem() {
       saveMenuToStorage();
     }
   } catch (error) {
-    console.warn('API menu unavailable, using local fallback:', error);
-    const nextId = getMenuItems().reduce((max, item) => Math.max(max, item.id || 0), 0) + 1;
-    window.cafeData.menuItems.push({ id: nextId, name, price, icon });
-    saveMenuToStorage();
+    console.error('Thêm món thất bại:', error);
+    messageEl.textContent = 'Thêm món thất bại. Vui lòng thử lại.';
+    messageEl.className = 'auth-message error';
+    return;
   }
 
   renderMenu();
@@ -533,12 +533,23 @@ async function addMenuItem() {
 
 async function deleteMenuItem(itemId) {
   const items = getMenuItems();
-  if (!items.some((item) => item.id === itemId)) return;
+  const itemToDelete = items.find((item) => item.id === itemId);
+
+  if (!itemToDelete) return;
+
+  const confirmed = window.confirm(`Bạn có chắc muốn xóa món "${itemToDelete.name}" không?`);
+  if (!confirmed) return;
 
   try {
     await apiRequest(`/api/menu/${itemId}`, { method: 'DELETE' });
   } catch (error) {
-    console.warn('API delete menu unavailable, using local fallback:', error);
+    console.error('Xóa món thất bại:', error);
+    const messageEl = document.getElementById('menuManagerMessage');
+    if (messageEl) {
+      messageEl.textContent = 'Xóa món thất bại. Vui lòng thử lại.';
+      messageEl.className = 'auth-message error';
+    }
+    return;
   }
 
   window.cafeData.menuItems = items.filter((item) => item.id !== itemId);
@@ -552,6 +563,12 @@ async function deleteMenuItem(itemId) {
   renderMenu();
   renderMenuManagerList();
   updateOrderSummary();
+
+  const messageEl = document.getElementById('menuManagerMessage');
+  if (messageEl) {
+    messageEl.textContent = `Đã xóa món "${itemToDelete.name}"!`;
+    messageEl.className = 'auth-message success';
+  }
 }
 
 function addToOrder(item) {
