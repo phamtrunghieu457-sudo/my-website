@@ -1,0 +1,193 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Quán Nước - Order & Thanh Toán</title>
+    <script>
+        window.APP_CONFIG = window.APP_CONFIG || {};
+        const isLocalDev = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+        const defaultApiUrl = isLocalDev ? 'http://localhost:3001' : 'https://your-cafe-api.onrender.com';
+        window.APP_CONFIG.API_BASE_URL = window.APP_CONFIG.API_BASE_URL || defaultApiUrl;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="loginScreen" class="auth-screen">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-icon">☕</div>
+                <h1>Đăng Nhập</h1>
+                <p>Quản lý quán nước</p>
+            </div>
+
+            <form id="loginForm" class="auth-form">
+                <label for="username">Tên đăng nhập</label>
+                <input id="username" class="auth-input" type="text" placeholder="Nhập tài khoản" required>
+
+                <label for="password">Mật khẩu</label>
+                <input id="password" class="auth-input" type="password" placeholder="Nhập mật khẩu" required>
+
+                <button type="submit" class="auth-btn">Đăng nhập</button>
+                <p class="auth-hint">Mặc định: admin / 123456</p>
+                <div id="loginMessage" class="auth-message" aria-live="polite"></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="user-menu" id="userMenu">
+        <button class="avatar-btn" id="avatarButton" type="button" aria-label="Tài khoản">
+            <span class="avatar-circle">A</span>
+        </button>
+        <div class="user-dropdown" id="userDropdown">
+            <button type="button" id="revenueBtn" class="logout-btn">💰 Tổng tiền đã nhận: <span id="revenueValue">0đ</span></button>
+            <button type="button" id="menuManagerBtn" class="logout-btn">⚙️ Điều chỉnh</button>
+            <button type="button" id="adminDashboardBtn" class="logout-btn">📊 Bill & doanh thu</button>
+            <button type="button" id="logoutBtn" class="logout-btn">Đăng xuất</button>
+        </div>
+    </div>
+
+    <div id="tableScreen">
+        <h1>☕ Chọn Bàn</h1>
+        <p class="subtitle">Vui lòng chọn bàn để bắt đầu đặt nước</p>
+
+        <div class="table-layout">
+            <div class="table-panel">
+                <div class="table-grid" id="tableGrid"></div>
+            </div>
+
+            <aside class="kitchen-panel">
+                <h3>☕ Nước đang chờ pha chế</h3>
+                <div class="bill-list" id="pendingBillsList">
+                    <div class="bill-empty">Chưa có bill nào đang chờ pha chế.</div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <div id="mainScreen">
+        <div class="header no-print">
+            <div class="table-info">
+                <span class="table-badge" id="currentTableBadge">🪑 Bàn 1</span>
+                <span style="font-weight:600; color:#555;">Đang phục vụ</span>
+            </div>
+            <button class="btn-back no-print" onclick="goBackToTables()">← Đổi bàn</button>
+        </div>
+
+        <div class="content-wrapper">
+            <div class="menu-section no-print">
+                <h2>📋 Menu Đồ Uống</h2>
+                <div class="menu-grid" id="menuGrid"></div>
+            </div>
+
+            <div class="order-section no-print">
+                <h2>🧾 Đơn hàng</h2>
+                <div class="order-list" id="orderList">
+                    <div class="order-empty">Chưa có món nào.<br>Chọn đồ uống từ menu bên trái 👈</div>
+                </div>
+                <div class="order-total">
+                    <span>Tổng tiền:</span>
+                    <span class="total-amount" id="totalAmount">0đ</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-print" onclick="printReceipt()" id="btnPrint" disabled>
+                        🖨️ In thanh toán
+                    </button>
+                    <button class="btn btn-pay" onclick="openPaymentModal()" id="btnPay" disabled>
+                        💰 Thanh toán
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="paymentModal">
+        <div class="modal">
+            <h2>💳 Thanh Toán</h2>
+            <p style="text-align:center; margin-bottom:15px;">
+                Tổng tiền: <strong id="modalTotal" style="color:var(--accent); font-size:1.3rem;">0đ</strong>
+            </p>
+            <div class="payment-options">
+                <div class="payment-option" id="optCash" onclick="selectPayment('cash')">
+                    <div class="pay-icon">💵</div>
+                    <div class="pay-label">Tiền mặt</div>
+                </div>
+                <div class="payment-option" id="optTransfer" onclick="selectPayment('transfer')">
+                    <div class="pay-icon">📱</div>
+                    <div class="pay-label">Chuyển khoản</div>
+                </div>
+            </div>
+
+            <div class="qr-container" id="qrContainer">
+                <p style="font-weight:700;">Quét mã QR để thanh toán:</p>
+                <div id="qrCode"></div>
+                <p class="qr-amount" id="qrAmount">Số tiền: 0đ</p>
+                <button class="btn-check-transfer" onclick="checkTransfer()">🔍 Kiểm tra đã chuyển khoản</button>
+                <div class="transfer-status" id="transferStatus"></div>
+            </div>
+
+            <button class="btn-confirm" id="btnConfirmPayment" onclick="confirmPayment()" disabled>
+                ✅ Xác nhận thanh toán
+            </button>
+            <button class="modal-close" onclick="closePaymentModal()">Đóng</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="menuManagerModal">
+        <div class="modal manager-modal">
+            <h2>⚙️ Quản lý menu</h2>
+            <div class="menu-manager-list" id="menuManagerList"></div>
+
+            <div class="menu-manager-form">
+                <div class="form-row">
+                    <input id="newDrinkName" class="auth-input" type="text" placeholder="Tên món mới" maxlength="30">
+                </div>
+                <div class="form-row split-row">
+                    <input id="newDrinkPrice" class="auth-input" type="number" min="1000" step="1000" placeholder="Giá">
+                    <input id="newDrinkIcon" class="auth-input" type="text" placeholder="Icon" maxlength="3">
+                </div>
+                <button class="btn-confirm" type="button" id="addDrinkBtn">➕ Thêm món</button>
+                <div id="menuManagerMessage" class="auth-message"></div>
+            </div>
+
+            <button class="modal-close" type="button" onclick="closeMenuManager()">Đóng</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="adminDashboardModal">
+        <div class="modal manager-modal">
+            <h2>📊 Bill & doanh thu</h2>
+
+            <div class="admin-summary" style="display:flex; gap:12px; margin:14px 0; flex-wrap:wrap;">
+                <div style="flex:1; min-width:150px; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:12px; text-align:center;">
+                    <div style="font-size:0.75rem; color:#7c2d12;">Tổng doanh thu</div>
+                    <strong id="adminTotalRevenue" style="font-size:1.3rem; color:#c2410c;">0đ</strong>
+                </div>
+                <div style="flex:1; min-width:150px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:12px; padding:12px; text-align:center;">
+                    <div style="font-size:0.75rem; color:#3730a3;">Số bill</div>
+                    <strong id="adminBillCount" style="font-size:1.3rem; color:#312e81;">0</strong>
+                </div>
+            </div>
+
+            <button type="button" id="dailyRevenueBtn" class="btn-confirm" style="margin-bottom:14px; width:100%;">📈 Xem doanh thu theo ngày</button>
+
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-bottom:16px;">
+                <canvas id="dailyRevenueChart" height="180"></canvas>
+            </div>
+
+            <div class="menu-manager-list" id="adminBillsList"></div>
+            <button class="modal-close" type="button" onclick="closeAdminDashboard()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="printArea">
+        <div class="receipt" id="receiptContent"></div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="state.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
