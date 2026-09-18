@@ -540,7 +540,7 @@ function renderMenu() {
   deleteTabBtn.className = 'menu-tab menu-tab-delete';
   deleteTabBtn.textContent = '−';
   deleteTabBtn.title = 'Xóa nhóm đang chọn';
-  deleteTabBtn.addEventListener('click', () => {
+  deleteTabBtn.addEventListener('click', async () => {
     const current = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
     const categories = getMenuCategories();
     if (categories.length <= 1) {
@@ -551,19 +551,12 @@ function renderMenu() {
     const confirmed = window.confirm(`Bạn có chắc muốn xóa nhóm "${current}" không?`);
     if (!confirmed) return;
 
-    const remaining = categories.filter((item) => item !== current);
-    saveMenuCategories(remaining);
-
-    const fallback = remaining[0] || 'Khác';
-    localStorage.setItem('cafeActiveMenuCategory', fallback);
-
-    const menuItems = getMenuItems().filter((item) => (item.category || 'Khác') !== current);
-    window.cafeData.menuItems = menuItems;
-    localStorage.setItem('cafeMenu', JSON.stringify(menuItems));
-
-    renderMenu();
-    renderMenuManagerList();
-    showToast(`Đã xóa nhóm "${current}"`, 'success');
+    try {
+      await deleteMenuCategory(current);
+      showToast(`Đã xóa nhóm "${current}"`, 'success');
+    } catch (error) {
+      showToast(error && error.message ? error.message : 'Không thể xóa nhóm.', 'error');
+    }
   });
   tabs.appendChild(deleteTabBtn);
 
@@ -709,6 +702,31 @@ async function renameMenuCategory(oldCategory, newCategory) {
   saveMenuToStorage();
   rebuildMenuCategoryList(items);
   localStorage.setItem('cafeActiveMenuCategory', to);
+  renderMenu();
+  renderMenuManagerList();
+
+  return result;
+}
+
+async function deleteMenuCategory(categoryName) {
+  const category = String(categoryName || '').trim() || 'Khác';
+  if (!category) return;
+
+  const result = await apiRequest('/api/menu/categories', {
+    method: 'DELETE',
+    body: JSON.stringify({ category })
+  });
+
+  const remaining = getMenuCategories().filter((item) => item !== category);
+  const fallback = remaining[0] || 'Khác';
+  saveMenuCategories(remaining.length ? remaining : ['Khác']);
+  localStorage.setItem('cafeActiveMenuCategory', fallback);
+
+  const items = getMenuItems().filter((item) => (item.category || 'Khác') !== category);
+  window.cafeData.menuItems = items;
+  saveMenuToStorage();
+  rebuildMenuCategoryList(items);
+
   renderMenu();
   renderMenuManagerList();
 

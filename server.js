@@ -249,6 +249,26 @@ app.put('/api/menu/categories', async (req, res) => {
   }
 });
 
+app.delete('/api/menu/categories', async (req, res) => {
+  const { category, from, name } = req.body || {};
+  const target = String(category || from || name || '').trim() || 'Khác';
+
+  if (!target || target === 'Khác' && !req.body) {
+    return res.json({ success: true, deletedCount: 0, category: target });
+  }
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM menu_items WHERE category = $1 RETURNING *',
+      [target]
+    );
+
+    return res.json({ success: true, deletedCount: result.rowCount, category: target });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete('/api/menu/:id', async (req, res) => {
   const { id } = req.params;
 
