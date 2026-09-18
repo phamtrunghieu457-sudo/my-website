@@ -374,11 +374,9 @@ function printReceipt() {
 
     let itemsHtml = '';
     orderItems.forEach(item => {
-        const itemTotal = item.price * item.quantity;
         itemsHtml += `
             <div class="receipt-line">
-                <span>${item.icon} ${item.name} x${item.quantity}</span>
-                <span>${formatMoney(itemTotal)}</span>
+                <span>${item.name}</span>
             </div>
         `;
     });
@@ -388,9 +386,9 @@ function printReceipt() {
     receiptContent.innerHTML = `
         <div class="receipt-header">
             <div class="receipt-title">Khu Tổ Hợp Đương</div>
-            <div style="font-size:0.85rem;">Địa chỉ: 998/3 Quang Trung,Thông Tây Hội TP.HCM</div>
+            <div style="font-size:0.85rem;">Địa chỉ: 998/3 Quang Trung, Thông Tây Hội TP.HCM</div>
             <div style="font-size:0.85rem;">SĐT: 0333 958 080</div>
-            <div class="receipt-table">🪑 ${selectedTable ? selectedTable.name : 'Bàn: -'}</div>
+            <div class="receipt-table">Bàn: ${selectedTable ? selectedTable.name : '-'}</div>
             <div style="font-size:0.8rem;">Ngày: ${new Date().toLocaleString('vi-VN')}</div>
         </div>
         ${itemsHtml}
