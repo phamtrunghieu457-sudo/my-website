@@ -818,8 +818,19 @@ async function confirmPayment() {
       paymentMethod
     };
 
-    state.billHistory.unshift(billRecord);
-    state.pendingBills = state.pendingBills.filter((bill) => bill.tableId !== state.selectedTable.id);
+    state.billHistory.unshift({ ...billRecord });
+
+    // After a successful payment, the order is sent to the kitchen queue.
+    state.pendingBills.unshift({
+      id: billRecord.id,
+      tableName: billRecord.tableName,
+      tableId: billRecord.tableId,
+      items: billRecord.items.map((item) => ({ ...item })),
+      total: billRecord.total,
+      createdAt: billRecord.createdAt,
+      paymentMethod: billRecord.paymentMethod
+    });
+
     state.tableOrders[state.selectedTable.id] = [];
     state.orderItems = [];
     updateBillHistory();
@@ -831,7 +842,6 @@ async function confirmPayment() {
   closePaymentModal();
   updateOrderSummary();
   renderPendingBills();
-  openAdminDashboard();
 
   setTimeout(() => {
     goBackToTables();
