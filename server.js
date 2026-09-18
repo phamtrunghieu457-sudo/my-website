@@ -57,8 +57,14 @@ async function ensureSchema() {
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         price INTEGER NOT NULL,
-        icon TEXT DEFAULT '☕'
+        icon TEXT DEFAULT '☕',
+        category TEXT DEFAULT 'Khác'
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE menu_items
+      ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Khác'
     `);
 
     await client.query(`
@@ -180,7 +186,7 @@ app.get('/api/menu', async (req, res) => {
 });
 
 app.post('/api/menu', async (req, res) => {
-  const { name, price, icon } = req.body;
+  const { name, price, icon, category } = req.body;
 
   if (!name || !Number.isFinite(Number(price)) || Number(price) <= 0) {
     return res.status(400).json({ error: 'Tên và giá món không hợp lệ' });
@@ -188,8 +194,8 @@ app.post('/api/menu', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO menu_items (name, price, icon) VALUES ($1, $2, $3) RETURNING *',
-      [name, Number(price), icon || '☕']
+      'INSERT INTO menu_items (name, price, icon, category) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, Number(price), icon || '☕', category || 'Khác']
     );
 
     return res.json(result.rows[0]);
