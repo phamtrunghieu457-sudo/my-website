@@ -598,9 +598,10 @@ function renderMenuManagerList() {
   const list = document.getElementById('menuManagerList');
   if (!list) return;
 
-  const items = getMenuItems();
+  const activeCategory = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
+  const items = getMenuItems().filter((item) => (item.category || 'Khác') === activeCategory);
   if (!items.length) {
-    list.innerHTML = '<div class="bill-empty">Chưa có món nào trong menu.</div>';
+    list.innerHTML = `<div class="bill-empty">Chưa có món nào trong nhóm "${activeCategory}".</div>`;
     return;
   }
 
@@ -626,28 +627,17 @@ function renderMenuManagerList() {
 function openMenuManager(categoryName = null) {
   const modal = document.getElementById('menuManagerModal');
   if (!modal) return;
+
+  const selectedCategory = categoryName || localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
+  localStorage.setItem('cafeActiveMenuCategory', selectedCategory);
   renderMenuManagerList();
   modal.classList.add('active');
 
-  if (categoryName) {
-    localStorage.setItem('cafeActiveMenuCategory', categoryName);
-  }
-
-  const categoryInput = document.getElementById('newDrinkCategory');
-  if (categoryInput) {
-    const current = categoryName || localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
-    categoryInput.value = current;
+  const nameInput = document.getElementById('newDrinkName');
+  if (nameInput) {
     setTimeout(() => {
-      categoryInput.focus();
-      categoryInput.select();
+      nameInput.focus();
     }, 50);
-  } else {
-    const nameInput = document.getElementById('newDrinkName');
-    if (nameInput) {
-      setTimeout(() => {
-        nameInput.focus();
-      }, 50);
-    }
   }
 }
 
