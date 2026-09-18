@@ -204,6 +204,51 @@ app.post('/api/menu', async (req, res) => {
   }
 });
 
+app.put('/api/menu/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, price, icon, category } = req.body;
+
+  if (!name || !Number.isFinite(Number(price)) || Number(price) <= 0) {
+    return res.status(400).json({ error: 'Tên và giá món không hợp lệ' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE menu_items SET name = $1, price = $2, icon = $3, category = $4 WHERE id = $5 RETURNING *',
+      [name, Number(price), icon || '☕', category || 'Khác', Number(id)]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy món cần sửa' });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/menu/categories', async (req, res) => {
+  const { from, to } = req.body;
+  const source = String(from || '').trim() || 'Khác';
+  const target = String(to || '').trim() || 'Khác';
+
+  if (!source || source === target) {
+    return res.json({ success: true, updatedCount: 0, category: target });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE menu_items SET category = $1 WHERE category = $2 RETURNING *',
+      [target, source]
+    );
+
+    return res.json({ success: true, updatedCount: result.rowCount, category: target });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete('/api/menu/:id', async (req, res) => {
   const { id } = req.params;
 

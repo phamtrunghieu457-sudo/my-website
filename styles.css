@@ -239,6 +239,12 @@ body {
     background: #f8fafc;
 }
 
+.menu-manager-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .menu-manager-info {
     display: flex;
     align-items: center;
@@ -267,14 +273,23 @@ body {
     font-weight: 700;
 }
 
+.menu-edit-btn,
 .menu-delete-btn {
     border: none;
     border-radius: 10px;
-    background: #fee2e2;
-    color: var(--danger);
     font-weight: 700;
     padding: 8px 10px;
     cursor: pointer;
+}
+
+.menu-edit-btn {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.menu-delete-btn {
+    background: #fee2e2;
+    color: var(--danger);
 }
 
 .menu-manager-form {
@@ -533,10 +548,11 @@ body {
     border-color: transparent;
 }
 
-.menu-tab-delete {
+.menu-tab-delete,
+.menu-tab-edit {
     min-width: 44px;
     padding: 8px 12px;
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     line-height: 1;
     background: linear-gradient(135deg, #f59e0b, #f97316);
     color: #fff;

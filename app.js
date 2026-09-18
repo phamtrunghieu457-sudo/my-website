@@ -82,6 +82,17 @@ function saveMenuCategories(categories) {
   localStorage.setItem('cafeMenuCategories', JSON.stringify(categories));
 }
 
+function rebuildMenuCategoryList(items = getMenuItems()) {
+  const categories = [...new Set(items.map((item) => (item.category || 'Khác').trim()).filter(Boolean))];
+  if (!categories.length) {
+    saveMenuCategories(['Khác']);
+    return ['Khác'];
+  }
+
+  saveMenuCategories(categories);
+  return categories;
+}
+
 function addCategoryGroup(categoryName) {
   const value = String(categoryName || '').trim();
   if (!value) return null;
@@ -500,6 +511,30 @@ function renderMenu() {
     tabs.appendChild(tabButton);
   });
 
+  const editTabBtn = document.createElement('button');
+  editTabBtn.type = 'button';
+  editTabBtn.className = 'menu-tab menu-tab-edit';
+  editTabBtn.textContent = '✎';
+  editTabBtn.title = 'Sửa nhóm đang chọn';
+  editTabBtn.addEventListener('click', async () => {
+    const current = localStorage.getItem('cafeActiveMenuCategory') || 'Khác';
+    const next = window.prompt('Tên nhóm mới:', current);
+    if (next === null) return;
+    const value = next.trim();
+    if (!value) {
+      showToast('Tên nhóm không được để trống.', 'error');
+      return;
+    }
+
+    try {
+      await renameMenuCategory(current, value);
+      showToast(`Đã đổi nhóm "${current}" thành "${value}"`, 'success');
+    } catch (error) {
+      showToast(error && error.message ? error.message : 'Không thể đổi tên nhóm.', 'error');
+    }
+  });
+  tabs.appendChild(editTabBtn);
+
   const deleteTabBtn = document.createElement('button');
   deleteTabBtn.type = 'button';
   deleteTabBtn.className = 'menu-tab menu-tab-delete';
@@ -615,9 +650,16 @@ function renderMenuManagerList() {
           <div class="menu-manager-category">${item.category || 'Khác'}</div>
         </div>
       </div>
-      <button class="menu-delete-btn" type="button" data-item-id="${item.id}">Xóa</button>
+      <div class="menu-manager-actions">
+        <button class="menu-edit-btn" type="button" data-item-id="${item.id}">Sửa</button>
+        <button class="menu-delete-btn" type="button" data-item-id="${item.id}">Xóa</button>
+      </div>
     </div>
   `).join('');
+
+  list.querySelectorAll('.menu-edit-btn').forEach((button) => {
+    button.addEventListener('click', () => editMenuItem(Number(button.dataset.itemId)));
+  });
 
   list.querySelectorAll('.menu-delete-btn').forEach((button) => {
     button.addEventListener('click', () => deleteMenuItem(Number(button.dataset.itemId)));
@@ -649,6 +691,73 @@ function closeMenuManager() {
   if (messageEl) {
     messageEl.textContent = '';
     messageEl.className = 'auth-message';
+  }
+}
+
+async function renameMenuCategory(oldCategory, newCategory) {
+  const from = String(oldCategory || 'Khác').trim();
+  const to = String(newCategory || 'Khác').trim();
+  if (!from || !to || from === to) return;
+
+  const result = await apiRequest('/api/menu/categories', {
+    method: 'PUT',
+    body: JSON.stringify({ from, to })
+  });
+
+  const items = getMenuItems().map((item) => ((item.category || 'Khác') === from ? { ...item, category: to } : item));
+  window.cafeData.menuItems = items;
+  saveMenuToStorage();
+  rebuildMenuCategoryList(items);
+  localStorage.setItem('cafeActiveMenuCategory', to);
+  renderMenu();
+  renderMenuManagerList();
+
+  return result;
+}
+
+async function editMenuItem(itemId) {
+  const items = getMenuItems();
+  const item = items.find((entry) => entry.id === itemId);
+  if (!item) return;
+
+  const newName = window.prompt('Tên mới:', item.name);
+  if (newName === null) return;
+
+  const newPriceValue = window.prompt('Giá mới:', String(item.price));
+  if (newPriceValue === null) return;
+
+  const newIcon = window.prompt('Icon mới:', item.icon || '☕');
+  if (newIcon === null) return;
+
+  const newCategory = window.prompt('Nhóm mới:', item.category || 'Khác');
+  if (newCategory === null) return;
+
+  const name = newName.trim();
+  const price = Number(newPriceValue);
+  const icon = (newIcon || '☕').trim() || '☕';
+  const category = (newCategory || 'Khác').trim() || 'Khác';
+
+  if (!name || !Number.isFinite(price) || price <= 0) {
+    showToast('Tên và giá món không hợp lệ.', 'error');
+    return;
+  }
+
+  try {
+    const updatedItem = await apiRequest(`/api/menu/${itemId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, price, icon, category })
+    });
+
+    const nextItems = items.map((entry) => entry.id === itemId ? { ...entry, ...updatedItem } : entry);
+    window.cafeData.menuItems = nextItems;
+    saveMenuToStorage();
+    rebuildMenuCategoryList(nextItems);
+    localStorage.setItem('cafeActiveMenuCategory', category);
+    renderMenu();
+    renderMenuManagerList();
+    showToast('Đã cập nhật món.', 'success');
+  } catch (error) {
+    showToast(error && error.message ? error.message : 'Không thể cập nhật món.', 'error');
   }
 }
 
