@@ -538,6 +538,27 @@ body {
     box-shadow: 0 8px 18px rgba(249, 115, 22, 0.22);
 }
 
+.menu-tab-add {
+    min-width: 44px;
+    padding: 8px 12px;
+    font-size: 1.3rem;
+    line-height: 1;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    color: #fff;
+    border-color: transparent;
+}
+
+.menu-tab-delete,
+.menu-tab-edit {
+    min-width: 44px;
+    padding: 8px 12px;
+    font-size: 1.2rem;
+    line-height: 1;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    color: #fff;
+    border-color: transparent;
+}
+
 .menu-category-block {
     background: linear-gradient(180deg, #fff, #fffaf5);
     border: 1px solid #f1d9b3;
@@ -579,6 +600,19 @@ body {
     font-weight: 700;
 }
 
+.menu-category-add {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    color: white;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 6px 12px rgba(249, 115, 22, 0.22);
+}
+
 .menu-category-empty {
     width: 100%;
     padding: 18px 12px;
@@ -589,6 +623,24 @@ body {
     font-size: 0.86rem;
     text-align: center;
     font-style: italic;
+}
+
+.menu-category-adjust {
+    margin-top: 12px;
+    width: 100%;
+    border: 1px solid #f2c38d;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #fff7ed, #ffedd5);
+    color: var(--primary);
+    font-weight: 700;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.menu-category-adjust:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(249, 115, 22, 0.12);
 }
 
 .menu-grid-inner {
