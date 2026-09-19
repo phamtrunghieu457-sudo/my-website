@@ -55,7 +55,6 @@
     <div id="tableScreen">
         <h1>☕ Chọn Bàn</h1>
         <p class="subtitle">Vui lòng chọn bàn để bắt đầu đặt nước</p>
-
         <div class="table-layout">
             <div class="table-panel">
                 <div class="table-grid" id="tableGrid"></div>
@@ -127,6 +126,8 @@
 
             <div class="qr-container" id="qrContainer">
                 <p style="font-weight:700;">Quét mã QR để thanh toán:</p>
+                <label class="qr-upload-label" for="customQrUpload">📷 Tải ảnh QR của bạn</label>
+                <input type="file" id="customQrUpload" accept="image/*" class="qr-upload-input">
                 <div id="qrCode"></div>
                 <p class="qr-amount" id="qrAmount">Số tiền: 0đ</p>
                 <button class="btn-check-transfer" onclick="checkTransfer()">🔍 Kiểm tra đã chuyển khoản</button>

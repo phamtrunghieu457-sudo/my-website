@@ -9,12 +9,13 @@ window.cafeState = {
   billHistory: [],
   isLoggedIn: false,
   totalRevenue: 0,
-  tableOrders: {}
+  tableOrders: {},
+  customQrImage: ''
 };
 
 const savedState = (() => {
   try {
-    const raw = localStorage.getItem(cafeStateStorageKey);
+    const raw = sessionStorage.getItem(cafeStateStorageKey);
     return raw ? JSON.parse(raw) : null;
   } catch (error) {
     return null;
@@ -42,7 +43,7 @@ window.cafeState.persist = function persistState() {
       : null
   };
 
-  localStorage.setItem(cafeStateStorageKey, JSON.stringify(snapshot));
+  sessionStorage.setItem(cafeStateStorageKey, JSON.stringify(snapshot));
 };
 
 window.cafeUtils = {

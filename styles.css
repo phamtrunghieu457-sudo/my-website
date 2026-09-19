@@ -1097,6 +1097,23 @@ body::-webkit-scrollbar,
     margin: 0 auto;
     border-radius: 8px;
 }
+.qr-upload-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    color: var(--primary);
+    font-weight: 700;
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+.qr-upload-input {
+    display: none;
+}
 .qr-hint {
     font-size: 0.9rem;
     color: #7f8c8d;
@@ -1193,7 +1210,17 @@ body::-webkit-scrollbar,
     display: flex;
 }
 
+@page {
+    size: 80mm auto;
+    margin: 0;
+}
+
 @media print {
+    html, body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+    }
     body * {
         visibility: hidden;
     }
@@ -1203,13 +1230,14 @@ body::-webkit-scrollbar,
     }
     #printArea {
         display: block !important;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
+        position: static !important;
+        width: 80mm !important;
+        max-width: 80mm !important;
+        min-height: auto;
+        margin: 0;
+        padding: 0;
         background: #fff;
-        padding: 30px;
-        font-size: 14px;
+        font-size: 12px;
         color: #000;
         z-index: 9999;
     }
@@ -1222,14 +1250,14 @@ body::-webkit-scrollbar,
 }
 
 .receipt {
-    max-width: 420px;
-    width: 100%;
+    width: 80mm;
+    max-width: 80mm;
     margin: 0 auto;
-    padding: 20px;
+    padding: 10px 8px 12px;
     font-family: 'Courier New', monospace;
     background: #fff;
     border: 1px dashed #ccc;
-    border-radius: 18px;
+    border-radius: 8px;
     box-shadow: 0 25px 60px rgba(0, 0, 0, 0.18);
 }
 .receipt .receipt-header {
@@ -1279,13 +1307,15 @@ body::-webkit-scrollbar,
 #qrCode canvas {
     display: block;
     margin: 0 auto;
-    width: 200px !important;
-    height: 200px !important;
+    width: 180px !important;
+    height: 180px !important;
+    max-width: 100%;
     border: 1px solid #ccc;
     padding: 5px;
     background: #fff;
     transform: scale(1.05);
     transform-origin: center center;
+    object-fit: contain;
 }
 .receipt .receipt-footer {
     text-align: center;

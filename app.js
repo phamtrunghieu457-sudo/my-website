@@ -2,6 +2,55 @@ const renderApiUrl = 'https://my-website-qpnq.onrender.com';
 window.APP_CONFIG = window.APP_CONFIG || { API_BASE_URL: renderApiUrl };
 const API_BASE_URL = window.APP_CONFIG.API_BASE_URL || renderApiUrl;
 
+const SHARED_STORAGE_KEYS = new Set([
+  'cafeTables',
+  'cafeMenu',
+  'cafeMenuCategories',
+  'cafeActiveMenuCategory',
+  'cafeAppState',
+  'cafeLoggedIn'
+]);
+
+function guardSharedCafeStorage() {
+  if (window.__cafeStorageGuardInstalled) return;
+
+  const applyGuard = (storage) => {
+    if (!storage || storage.__cafeStorageGuardInstalled) return;
+
+    const nativeSetItem = storage.setItem.bind(storage);
+    const nativeGetItem = storage.getItem.bind(storage);
+    const nativeRemoveItem = storage.removeItem.bind(storage);
+
+    storage.setItem = function guardedSetItem(key, value) {
+      if (SHARED_STORAGE_KEYS.has(String(key))) {
+        return undefined;
+      }
+      return nativeSetItem(key, value);
+    };
+
+    storage.getItem = function guardedGetItem(key) {
+      if (SHARED_STORAGE_KEYS.has(String(key))) {
+        return null;
+      }
+      return nativeGetItem(key);
+    };
+
+    storage.removeItem = function guardedRemoveItem(key) {
+      if (SHARED_STORAGE_KEYS.has(String(key))) {
+        return undefined;
+      }
+      return nativeRemoveItem(key);
+    };
+
+    storage.__cafeStorageGuardInstalled = true;
+  };
+
+  applyGuard(window.localStorage);
+  window.__cafeStorageGuardInstalled = true;
+}
+
+guardSharedCafeStorage();
+
 const state = window.cafeState;
 const { formatMoney, getTotal } = window.cafeUtils;
 
@@ -31,6 +80,19 @@ function getMenuItems() {
   return Array.isArray(window.cafeData.menuItems) ? window.cafeData.menuItems : [];
 }
 
+async function syncTableStatusToServer(tableId, status) {
+  if (!tableId || !status) return;
+
+  try {
+    await apiRequest(`/api/tables/${tableId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    });
+  } catch (error) {
+    console.warn('Không thể đồng bộ trạng thái bàn lên server:', error);
+  }
+}
+
 function persistCafeState() {
   if (state && typeof state.persist === 'function') {
     state.persist();
@@ -38,10 +100,16 @@ function persistCafeState() {
 }
 
 function syncTableStatuses() {
-  window.cafeData.tables = getTables().map((table) => ({
-    ...table,
-    status: state.tableOrders[table.id] && state.tableOrders[table.id].length > 0 ? 'occupied' : 'empty'
-  }));
+  window.cafeData.tables = getTables().map((table) => {
+    const hasSessionOrder = state.tableOrders[table.id] && state.tableOrders[table.id].length > 0;
+    const nextStatus = hasSessionOrder ? 'occupied' : (table.status === 'occupied' || table.status === 'empty' ? table.status : 'empty');
+
+    return {
+      ...table,
+      status: nextStatus
+    };
+  });
+
   localStorage.setItem('cafeTables', JSON.stringify(window.cafeData.tables));
 }
 
@@ -112,6 +180,46 @@ function saveTablesToStorage() {
   localStorage.setItem('cafeTables', JSON.stringify(getTables()));
 }
 
+async function refreshSharedData() {
+  try {
+    const [menuData, tableData] = await Promise.all([
+      apiRequest('/api/menu'),
+      apiRequest('/api/tables')
+    ]);
+
+    if (Array.isArray(menuData) && menuData.length) {
+      window.cafeData.menuItems = menuData;
+      saveMenuToStorage();
+    }
+
+    if (Array.isArray(tableData) && tableData.length) {
+      window.cafeData.tables = tableData;
+      saveTablesToStorage();
+    }
+
+    rebuildMenuCategoryList(window.cafeData.menuItems || []);
+    syncTableStatuses();
+    renderMenu();
+    renderTableGrid();
+    renderMenuManagerList();
+    updateOrderSummary();
+    renderPendingBills();
+  } catch (error) {
+    console.warn('Không thể đồng bộ dữ liệu chia sẻ từ server:', error);
+  }
+}
+
+function startSharedDataPolling() {
+  if (window.__cafeSharedPollingId) {
+    return;
+  }
+
+  window.__cafeSharedPollingId = window.setInterval(() => {
+    refreshSharedData();
+    syncRevenueFromServer();
+  }, 4000);
+}
+
 async function hydrateStaticData() {
   try {
     const menuData = await apiRequest('/api/menu');
@@ -163,7 +271,10 @@ function saveTableOrder(tableId, items) {
   if (state.selectedTable && state.selectedTable.id === tableId) {
     state.orderItems = [...state.tableOrders[tableId]];
   }
+
+  const nextStatus = state.tableOrders[tableId] && state.tableOrders[tableId].length > 0 ? 'occupied' : 'empty';
   syncTableStatuses();
+  void syncTableStatusToServer(tableId, nextStatus);
   persistCafeState();
 }
 
@@ -291,7 +402,7 @@ function logout() {
   state.pendingBills = [];
   state.tableOrders = {};
   syncTableStatuses();
-  localStorage.removeItem('cafeLoggedIn');
+  sessionStorage.removeItem('cafeLoggedIn');
   persistCafeState();
 
   const loginForm = document.getElementById('loginForm');
@@ -334,7 +445,7 @@ async function handleLogin(event) {
     }
 
     state.isLoggedIn = true;
-    localStorage.setItem('cafeLoggedIn', 'true');
+    sessionStorage.setItem('cafeLoggedIn', 'true');
     persistCafeState();
     messageEl.textContent = 'Đăng nhập thành công!';
     messageEl.className = 'auth-message success';
@@ -351,7 +462,7 @@ async function handleLogin(event) {
   }
 
   state.isLoggedIn = true;
-  localStorage.setItem('cafeLoggedIn', 'true');
+  sessionStorage.setItem('cafeLoggedIn', 'true');
   persistCafeState();
   messageEl.textContent = 'Đăng nhập thành công!';
   messageEl.className = 'auth-message success';
@@ -467,6 +578,7 @@ function completePendingBill(billId) {
     const table = getTables().find((item) => item.id === bill.tableId);
     if (table) {
       table.status = 'empty';
+      void syncTableStatusToServer(table.id, 'empty');
     }
   }
 
@@ -1022,11 +1134,13 @@ function openPaymentModal() {
   const confirmBtn = document.getElementById('btnConfirmPayment');
   const transferStatus = document.getElementById('transferStatus');
   const qrCode = document.getElementById('qrCode');
+  const customQrUpload = document.getElementById('customQrUpload');
 
   if (cash) cash.classList.remove('selected');
   if (transfer) transfer.classList.remove('selected');
   if (qrContainer) qrContainer.classList.remove('active');
   if (confirmBtn) confirmBtn.disabled = true;
+  if (customQrUpload) customQrUpload.value = '';
   if (transferStatus) {
     transferStatus.className = 'transfer-status';
     transferStatus.textContent = '';
@@ -1069,25 +1183,86 @@ function selectPayment(method) {
   }
 }
 
-function generateQRCode() {
-  const total = getTotal(state.orderItems);
-  const qrData = `pay:${total}:${state.selectedTable ? state.selectedTable.id : 0}:${state.orderItems.length}:${Date.now()}`;
-  const qrCodeElement = document.getElementById('qrCode');
-  const qrAmount = document.getElementById('qrAmount');
+function getCustomQrImage() {
+  try {
+    const fromSession = sessionStorage.getItem('cafeCustomQrImage');
+    if (fromSession) {
+      state.customQrImage = fromSession;
+      return fromSession;
+    }
+  } catch (error) {
+    console.warn('Không thể đọc ảnh QR tùy chỉnh:', error);
+  }
 
-  if (qrCodeElement) qrCodeElement.innerHTML = '';
-  if (qrAmount) qrAmount.textContent = `Số tiền: ${formatMoney(total)}`;
+  return state.customQrImage || '';
+}
+
+function renderQrImageInto(target, options = {}) {
+  if (!target) return;
+
+  target.innerHTML = '';
+  const customValue = getCustomQrImage();
+
+  if (customValue) {
+    const img = document.createElement('img');
+    img.src = customValue;
+    img.alt = 'Mã QR thanh toán';
+    img.style.width = options.width ? `${options.width}px` : '180px';
+    img.style.height = options.height ? `${options.height}px` : '180px';
+    img.style.objectFit = 'contain';
+    target.appendChild(img);
+    return;
+  }
+
+  const total = Number(options.total || getTotal(state.orderItems) || 0);
+  const qrData = `pay:${total}:${state.selectedTable ? state.selectedTable.id : 0}:${state.orderItems.length}:${Date.now()}`;
 
   if (window.QRCode) {
-    new window.QRCode(qrCodeElement, {
+    new window.QRCode(target, {
       text: qrData,
-      width: 180,
-      height: 180,
+      width: options.width || 180,
+      height: options.height || 180,
       colorDark: '#000000',
       colorLight: '#ffffff',
       correctLevel: window.QRCode.CorrectLevel.H
     });
   }
+}
+
+function generateQRCode() {
+  const total = getTotal(state.orderItems);
+  const qrCodeElement = document.getElementById('qrCode');
+  const qrAmount = document.getElementById('qrAmount');
+
+  if (qrAmount) qrAmount.textContent = `Số tiền: ${formatMoney(total)}`;
+  renderQrImageInto(qrCodeElement, { total, width: 180, height: 180 });
+}
+
+function handleCustomQrUpload(event) {
+  const file = event.target && event.target.files ? event.target.files[0] : null;
+  if (!file) return;
+
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('Ảnh QR quá lớn. Vui lòng chọn ảnh dưới 2MB.', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || '');
+    state.customQrImage = dataUrl;
+    try {
+      sessionStorage.setItem('cafeCustomQrImage', dataUrl);
+    } catch (error) {
+      console.warn('Không thể lưu ảnh QR tùy chỉnh:', error);
+    }
+
+    if (state.selectedPaymentMethod === 'transfer') {
+      generateQRCode();
+    }
+    showToast('✅ Đã tải ảnh QR của bạn.', 'success');
+  };
+  reader.readAsDataURL(file);
 }
 
 function checkTransfer() {
@@ -1189,6 +1364,7 @@ async function confirmPayment() {
 
     state.tableOrders[state.selectedTable.id] = [];
     state.orderItems = [];
+    void syncTableStatusToServer(state.selectedTable.id, 'empty');
     updateBillHistory();
     renderTableGrid();
   }
@@ -1304,14 +1480,11 @@ function printReceipt() {
   if (printArea) printArea.classList.add('active');
 
   const qrContainer = document.getElementById('receiptQrContainer');
-  if (qrContainer && window.QRCode) {
-    new window.QRCode(qrContainer, {
-      text: receiptData,
+  if (qrContainer) {
+    renderQrImageInto(qrContainer, {
       width: 180,
       height: 180,
-      colorDark: '#000000',
-      colorLight: '#ffffff',
-      correctLevel: window.QRCode.CorrectLevel.M
+      total
     });
   }
 }
@@ -1345,11 +1518,13 @@ function showToast(message, type = 'info') {
 
 async function init() {
   await hydrateStaticData();
+  await refreshSharedData();
   syncTableStatuses();
   restorePersistedView();
   await syncRevenueFromServer();
+  startSharedDataPolling();
 
-  const savedLogin = localStorage.getItem('cafeLoggedIn') === 'true';
+  const savedLogin = sessionStorage.getItem('cafeLoggedIn') === 'true';
   if (savedLogin) {
     state.isLoggedIn = true;
     if (state.selectedTable) {
@@ -1430,6 +1605,11 @@ async function init() {
   const dailyRevenueBtn = document.getElementById('dailyRevenueBtn');
   if (dailyRevenueBtn) {
     dailyRevenueBtn.addEventListener('click', loadDailyRevenueChart);
+  }
+
+  const customQrUpload = document.getElementById('customQrUpload');
+  if (customQrUpload) {
+    customQrUpload.addEventListener('change', handleCustomQrUpload);
   }
 
   document.addEventListener('click', (event) => {
