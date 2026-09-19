@@ -203,6 +203,7 @@ async function refreshSharedData() {
     renderTableGrid();
     renderMenuManagerList();
     updateOrderSummary();
+    await syncPendingBillsFromServer();
     renderPendingBills();
   } catch (error) {
     console.warn('Không thể đồng bộ dữ liệu chia sẻ từ server:', error);
@@ -543,6 +544,34 @@ async function loadDailyRevenueChart() {
   renderDailyRevenueChart(buildDailyRevenuePoints());
 }
 
+async function syncPendingBillsFromServer() {
+  try {
+    const orders = await apiRequest('/api/orders/pending');
+    if (!Array.isArray(orders)) return;
+
+    state.pendingBills = orders.map((order) => ({
+      id: Number(order.id),
+      tableId: Number(order.table_id),
+      tableName: order.table_name || `Bàn ${order.table_id}`,
+      total: Number(order.total || 0),
+      createdAt: order.created_at || new Date().toISOString(),
+      items: Array.isArray(order.items) ? order.items.map((item) => ({
+        id: Number(item.item_id || item.id),
+        name: item.name,
+        icon: item.icon || '☕',
+        price: Number(item.price || 0),
+        quantity: Number(item.quantity || 0),
+        note: item.note || ''
+      })) : []
+    }));
+
+    persistCafeState();
+    renderPendingBills();
+  } catch (error) {
+    console.warn('Không thể đồng bộ đơn đang chờ phục vụ từ server:', error);
+  }
+}
+
 function renderPendingBills() {
   const list = document.getElementById('pendingBillsList');
   if (!list) return;
@@ -559,7 +588,7 @@ function renderPendingBills() {
         <span class="bill-total">${formatMoney(bill.total)}</span>
       </div>
       <ul class="bill-items">
-        ${bill.items.map((item) => `
+        ${(bill.items || []).map((item) => `
           <li class="bill-item">
             <span>${item.icon || '☕'} ${item.name} x${item.quantity}</span>
             <span>${formatMoney(Number(item.price || 0) * Number(item.quantity || 0))}</span>
@@ -572,7 +601,7 @@ function renderPendingBills() {
   `).join('');
 }
 
-function completePendingBill(billId) {
+async function completePendingBill(billId) {
   const bill = state.pendingBills.find((item) => item.id === billId);
   if (bill && bill.tableId) {
     const table = getTables().find((item) => item.id === bill.tableId);
@@ -582,12 +611,22 @@ function completePendingBill(billId) {
     }
   }
 
+  try {
+    await apiRequest(`/api/orders/${billId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: 'completed' })
+    });
+  } catch (error) {
+    console.warn('Không cập nhật trạng thái đơn hàng lên server:', error);
+  }
+
   state.pendingBills = state.pendingBills.filter((item) => item.id !== billId);
   syncTableStatuses();
   persistCafeState();
   renderTableGrid();
   renderPendingBills();
   showToast('✅ Bill đã hoàn thành!', 'success');
+  await syncPendingBillsFromServer();
 }
 
 function renderTableGrid() {
@@ -1657,6 +1696,8 @@ async function init() {
   if (customQrUpload) {
     customQrUpload.addEventListener('change', handleCustomQrUpload);
   }
+
+  await syncPendingBillsFromServer();
 
   document.addEventListener('click', (event) => {
     const dropdown = document.getElementById('userDropdown');

@@ -376,6 +376,29 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
+app.get('/api/orders/pending', async (req, res) => {
+  try {
+    const ordersResult = await pool.query('SELECT * FROM orders WHERE status = $1 ORDER BY created_at DESC', ['pending']);
+    const orders = ordersResult.rows;
+
+    const result = await Promise.all(orders.map(async (order) => {
+      const itemsResult = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [order.id]);
+      return {
+        ...order,
+        items: itemsResult.rows.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity || 0),
+          price: Number(item.price || 0)
+        }))
+      };
+    }));
+
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/revenue', async (req, res) => {
   try {
     const summaryResult = await pool.query('SELECT total FROM revenue_summary WHERE id = 1');
@@ -454,6 +477,30 @@ app.put('/api/tables/:id/status', async (req, res) => {
     }
 
     return res.json({ success: true, tableId: Number(id), status });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/orders/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ error: 'Thiếu trạng thái đơn hàng' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
+      [status, Number(id)]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+    }
+
+    return res.json({ success: true, orderId: Number(id), status });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
