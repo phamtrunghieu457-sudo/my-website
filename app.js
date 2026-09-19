@@ -1436,6 +1436,42 @@ function closeAdminDashboard() {
   if (modal) modal.classList.remove('active');
 }
 
+async function resetRevenueAndBills() {
+  const confirmed = window.confirm('Bạn có chắc muốn reset toàn bộ bill và doanh thu? Hành động này sẽ xóa dữ liệu thống kê hiện tại.');
+  if (!confirmed) return;
+
+  try {
+    state.totalRevenue = 0;
+    state.billHistory = [];
+    state.pendingBills = [];
+    state.tableOrders = {};
+    state.orderItems = [];
+    state.selectedTable = null;
+    persistCafeState();
+
+    const revenueReset = await apiRequest('/api/revenue', {
+      method: 'POST',
+      body: JSON.stringify({ total: 0 })
+    }).catch(() => ({ success: true }));
+
+    if (revenueReset && revenueReset.success === false) {
+      throw new Error(revenueReset.message || 'Không thể reset doanh thu');
+    }
+
+    window.cafeData.tables = getTables().map((table) => ({ ...table, status: 'empty' }));
+    saveTablesToStorage();
+    renderTableGrid();
+    renderPendingBills();
+    updateRevenueDisplay();
+    updateBillHistory();
+    await openAdminDashboard();
+    showToast('✅ Đã reset bill & doanh thu!', 'success');
+  } catch (error) {
+    console.error('Reset dữ liệu thất bại:', error);
+    showToast('❌ Reset thất bại. Vui lòng thử lại.', 'error');
+  }
+}
+
 function printReceipt() {
   if (!state.orderItems.length) return;
 
@@ -1605,6 +1641,11 @@ async function init() {
   const dailyRevenueBtn = document.getElementById('dailyRevenueBtn');
   if (dailyRevenueBtn) {
     dailyRevenueBtn.addEventListener('click', loadDailyRevenueChart);
+  }
+
+  const resetRevenueBtn = document.getElementById('resetRevenueBtn');
+  if (resetRevenueBtn) {
+    resetRevenueBtn.addEventListener('click', resetRevenueAndBills);
   }
 
   const customQrUpload = document.getElementById('customQrUpload');

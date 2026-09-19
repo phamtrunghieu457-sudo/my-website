@@ -163,7 +163,8 @@
     </div>
 
     <div class="modal-overlay" id="adminDashboardModal">
-        <div class="modal manager-modal">
+        <div class="modal manager-modal admin-dashboard-modal">
+            <button class="admin-close-x" type="button" onclick="closeAdminDashboard()" aria-label="Đóng">✕</button>
             <h2>📊 Bill & doanh thu</h2>
 
             <div class="admin-summary" style="display:flex; gap:12px; margin:14px 0; flex-wrap:wrap;">
@@ -178,6 +179,7 @@
             </div>
 
             <button type="button" id="dailyRevenueBtn" class="btn-confirm" style="margin-bottom:14px; width:100%;">📈 Xem doanh thu theo ngày</button>
+            <button type="button" id="resetRevenueBtn" class="btn btn-danger" style="margin-bottom:14px; width:100%;">🔄 Reset bill & doanh thu</button>
 
             <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-bottom:16px;">
                 <canvas id="dailyRevenueChart" height="180"></canvas>

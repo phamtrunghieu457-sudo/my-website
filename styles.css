@@ -1195,6 +1195,39 @@ body::-webkit-scrollbar,
     background: #dfe6e9;
 }
 
+.admin-dashboard-modal {
+    position: relative;
+}
+
+.admin-close-x {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    border: none;
+    background: #fee2e2;
+    color: #991b1b;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.admin-close-x:hover {
+    background: #fecaca;
+}
+
+.btn-danger {
+    background: #ef4444 !important;
+    color: #fff !important;
+}
+
+.btn-danger:hover {
+    background: #dc2626 !important;
+}
+
 #printArea {
     position: fixed;
     inset: 0;
