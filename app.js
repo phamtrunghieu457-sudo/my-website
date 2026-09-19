@@ -1480,6 +1480,10 @@ async function resetRevenueAndBills() {
   if (!confirmed) return;
 
   try {
+    await apiRequest('/api/revenue/reset', { method: 'POST' }).catch((error) => {
+      console.warn('Reset server thất bại, vẫn tiếp tục reset local:', error);
+    });
+
     state.totalRevenue = 0;
     state.billHistory = [];
     state.pendingBills = [];
@@ -1487,15 +1491,6 @@ async function resetRevenueAndBills() {
     state.orderItems = [];
     state.selectedTable = null;
     persistCafeState();
-
-    try {
-      await apiRequest('/api/revenue', {
-        method: 'POST',
-        body: JSON.stringify({ total: 0 })
-      });
-    } catch (error) {
-      console.warn('Không cần reset từ server vì doanh thu đang là 0 hoặc API không chấp nhận 0:', error);
-    }
 
     window.cafeData.tables = getTables().map((table) => ({ ...table, status: 'empty' }));
     saveTablesToStorage();

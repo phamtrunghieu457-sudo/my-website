@@ -438,6 +438,32 @@ app.post('/api/revenue', async (req, res) => {
   }
 });
 
+app.post('/api/revenue/reset', async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM payments');
+    await client.query('DELETE FROM order_items');
+    await client.query('DELETE FROM orders');
+    await client.query(
+      `INSERT INTO revenue_summary (id, total, updated_at)
+       VALUES (1, 0, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         total = 0,
+         updated_at = NOW()`
+    );
+    await client.query('COMMIT');
+
+    return res.json({ success: true, total: 0 });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/revenue-by-day', async (req, res) => {
   try {
     const result = await pool.query(
