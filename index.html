@@ -116,7 +116,7 @@
             <div class="payment-options">
                 <div class="payment-option" id="optCash" onclick="selectPayment('cash')">
                     <div class="pay-icon">💵</div>
-                    <div class="pay-label">Tiền mặt</div>
+                    <div class="pay-label">Tiền gitmặt</div>
                 </div>
                 <div class="payment-option" id="optTransfer" onclick="selectPayment('transfer')">
                     <div class="pay-icon">📱</div>
@@ -179,7 +179,7 @@
             </div>
 
             <button type="button" id="dailyRevenueBtn" class="btn-confirm" style="margin-bottom:14px; width:100%;">📈 Xem doanh thu theo ngày</button>
-            <button type="button" id="resetRevenueBtn" class="btn btn-danger" style="margin-bottom:14px; width:100%;">🔄 Reset bill & doanh thu</button>
+            <button type="button" id="resetRevenueBtn" class="btn btn-danger" onclick="resetRevenueAndBills()" style="margin-bottom:14px; width:100%;">🔄 Reset bill & doanh thu</button>
 
             <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-bottom:16px;">
                 <canvas id="dailyRevenueChart" height="180"></canvas>

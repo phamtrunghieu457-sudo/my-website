@@ -1201,22 +1201,26 @@ body::-webkit-scrollbar,
 
 .admin-close-x {
     position: absolute;
-    top: 14px;
-    right: 14px;
+    top: 12px;
+    right: 12px;
     border: none;
-    background: #fee2e2;
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
     color: #991b1b;
-    width: 34px;
-    height: 34px;
-    border-radius: 999px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
     font-size: 1.2rem;
     cursor: pointer;
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1;
+    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.18);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .admin-close-x:hover {
-    background: #fecaca;
+    background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 10px 20px rgba(239, 68, 68, 0.22);
 }
 
 .btn-danger {

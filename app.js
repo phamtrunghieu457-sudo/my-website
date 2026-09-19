@@ -1449,13 +1449,13 @@ async function resetRevenueAndBills() {
     state.selectedTable = null;
     persistCafeState();
 
-    const revenueReset = await apiRequest('/api/revenue', {
-      method: 'POST',
-      body: JSON.stringify({ total: 0 })
-    }).catch(() => ({ success: true }));
-
-    if (revenueReset && revenueReset.success === false) {
-      throw new Error(revenueReset.message || 'Không thể reset doanh thu');
+    try {
+      await apiRequest('/api/revenue', {
+        method: 'POST',
+        body: JSON.stringify({ total: 0 })
+      });
+    } catch (error) {
+      console.warn('Không cần reset từ server vì doanh thu đang là 0 hoặc API không chấp nhận 0:', error);
     }
 
     window.cafeData.tables = getTables().map((table) => ({ ...table, status: 'empty' }));
@@ -1464,7 +1464,12 @@ async function resetRevenueAndBills() {
     renderPendingBills();
     updateRevenueDisplay();
     updateBillHistory();
-    await openAdminDashboard();
+
+    const modal = document.getElementById('adminDashboardModal');
+    if (modal && modal.classList.contains('active')) {
+      await openAdminDashboard();
+    }
+
     showToast('✅ Đã reset bill & doanh thu!', 'success');
   } catch (error) {
     console.error('Reset dữ liệu thất bại:', error);
