@@ -10,8 +10,8 @@ window.cafeState = {
   isLoggedIn: false,
   totalRevenue: 0,
   tableOrders: {},
-  customQrImage: '',
-  defaultQrImage: 'assets/payment-qr.svg'
+  customQrImage: 'image/qr.jpg',
+  defaultQrImage: 'image/qr.jpg'
 };
 
 const savedState = (() => {

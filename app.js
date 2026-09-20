@@ -1278,32 +1278,17 @@ function renderQrImageInto(target, options = {}) {
   if (!target) return;
 
   target.innerHTML = '';
-  const customValue = getCustomQrImage();
+  const imageSrc = getCustomQrImage() || state.defaultQrImage || 'image/qr.jpg';
 
-  if (customValue) {
-    const img = document.createElement('img');
-    img.src = customValue;
-    img.alt = 'Mã QR thanh toán';
-    img.style.width = options.width ? `${options.width}px` : '180px';
-    img.style.height = options.height ? `${options.height}px` : '180px';
-    img.style.objectFit = 'contain';
-    target.appendChild(img);
-    return;
-  }
-
-  const total = Number(options.total || getTotal(state.orderItems) || 0);
-  const qrData = `pay:${total}:${state.selectedTable ? state.selectedTable.id : 0}:${state.orderItems.length}:${Date.now()}`;
-
-  if (window.QRCode) {
-    new window.QRCode(target, {
-      text: qrData,
-      width: options.width || 180,
-      height: options.height || 180,
-      colorDark: '#000000',
-      colorLight: '#ffffff',
-      correctLevel: window.QRCode.CorrectLevel.H
-    });
-  }
+  const img = document.createElement('img');
+  img.src = imageSrc;
+  img.alt = 'Mã QR thanh toán';
+  img.style.width = options.width ? `${options.width}px` : '180px';
+  img.style.height = options.height ? `${options.height}px` : '180px';
+  img.style.objectFit = 'contain';
+  img.style.display = 'block';
+  img.style.margin = '0 auto';
+  target.appendChild(img);
 }
 
 function generateQRCode() {
