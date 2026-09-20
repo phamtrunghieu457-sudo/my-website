@@ -1233,14 +1233,14 @@ function closePaymentModal() {
 
 function selectPayment(method) {
   state.selectedPaymentMethod = method;
-  state.transferConfirmed = false;
+  state.transferConfirmed = method === 'transfer';
 
   document.getElementById('optCash').classList.remove('selected');
   document.getElementById('optTransfer').classList.remove('selected');
   const transferStatus = document.getElementById('transferStatus');
   if (transferStatus) {
-    transferStatus.className = 'transfer-status';
-    transferStatus.textContent = '';
+    transferStatus.className = 'transfer-status success';
+    transferStatus.textContent = method === 'transfer' ? '✅ Sẵn sàng thanh toán chuyển khoản.' : '';
   }
 
   if (method === 'cash') {
@@ -1251,7 +1251,7 @@ function selectPayment(method) {
   } else if (method === 'transfer') {
     document.getElementById('optTransfer').classList.add('selected');
     document.getElementById('qrContainer').classList.add('active');
-    document.getElementById('btnConfirmPayment').disabled = true;
+    document.getElementById('btnConfirmPayment').disabled = false;
     generateQRCode();
   }
 }
@@ -1353,11 +1353,13 @@ async function confirmPayment() {
 
   const paymentMethod = state.selectedPaymentMethod;
   if (paymentMethod === 'cash') {
+    state.transferConfirmed = false;
     showToast('✅ Thanh toán tiền mặt thành công!', 'success');
-  } else if (paymentMethod === 'transfer' && state.transferConfirmed) {
+  } else if (paymentMethod === 'transfer') {
+    state.transferConfirmed = true;
     showToast('✅ Thanh toán chuyển khoản thành công!', 'success');
   } else {
-    showToast('❌ Vui lòng kiểm tra chuyển khoản trước!', 'error');
+    showToast('❌ Vui lòng chọn phương thức thanh toán!', 'error');
     return;
   }
 
@@ -1543,9 +1545,14 @@ function printReceipt() {
 
   let itemsHtml = '';
   state.orderItems.forEach((item) => {
+    const itemTotal = Number(item.price || 0) * Number(item.quantity || 0);
     itemsHtml += `
-      <div class="receipt-line">
-        <span>${item.name}</span>
+      <div class="receipt-line receipt-item-row">
+        <span class="receipt-item-name">${item.name}</span>
+        <span class="receipt-item-total">${formatMoney(itemTotal)}</span>
+      </div>
+      <div class="receipt-line receipt-item-meta">
+        <span>${Number(item.quantity || 0)} x ${formatMoney(item.price || 0)}</span>
       </div>
     `;
   });
@@ -1555,12 +1562,14 @@ function printReceipt() {
   receiptContent.innerHTML = `
     <div class="receipt-header">
       <div class="receipt-title">Khu Tổ Hợp Đương</div>
-      <div style="font-size:0.85rem;">Địa chỉ: 998/3 Quang Trung, Thông Tây Hội TP.HCM</div>
-      <div style="font-size:0.85rem;">SĐT: 0333 958 080</div>
+      <div class="receipt-address">Địa chỉ: 998/3 Quang Trung, Thông Tây Hội TP.HCM</div>
+      <div class="receipt-address">SĐT: 0333 958 080</div>
       <div class="receipt-table">Bàn: ${state.selectedTable ? state.selectedTable.name : '-'}</div>
-      <div style="font-size:0.8rem;">Ngày: ${new Date().toLocaleString('vi-VN')}</div>
+      <div class="receipt-date">Ngày: ${new Date().toLocaleString('vi-VN')}</div>
     </div>
+    <div class="receipt-divider"></div>
     ${itemsHtml}
+    <div class="receipt-divider"></div>
     <div class="receipt-total">
       <span>TỔNG CỘNG</span>
       <span>${formatMoney(total)}</span>
