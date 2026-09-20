@@ -133,32 +133,36 @@ function saveMenuToStorage() {
 
 function getMenuCategories() {
   const saved = JSON.parse(localStorage.getItem('cafeMenuCategories') || 'null');
-  if (Array.isArray(saved) && saved.length) {
-    return saved;
+  const derived = [...new Set(getMenuItems().map((item) => (item.category || 'Khác').trim()).filter(Boolean))];
+  const merged = Array.from(new Set([...(Array.isArray(saved) ? saved : []), ...derived]));
+
+  if (merged.length) {
+    localStorage.setItem('cafeMenuCategories', JSON.stringify(merged));
+    return merged;
   }
 
-  const categories = [...new Set(getMenuItems().map((item) => (item.category || 'Khác').trim()).filter(Boolean))];
-  if (!categories.length) {
-    categories.push('Khác');
-  }
-
-  localStorage.setItem('cafeMenuCategories', JSON.stringify(categories));
-  return categories;
+  const fallback = ['Khác'];
+  localStorage.setItem('cafeMenuCategories', JSON.stringify(fallback));
+  return fallback;
 }
 
 function saveMenuCategories(categories) {
-  localStorage.setItem('cafeMenuCategories', JSON.stringify(categories));
+  const cleaned = Array.from(new Set((Array.isArray(categories) ? categories : []).map((item) => String(item || '').trim()).filter(Boolean)));
+  const next = cleaned.length ? cleaned : ['Khác'];
+  localStorage.setItem('cafeMenuCategories', JSON.stringify(next));
+  return next;
 }
 
 function rebuildMenuCategoryList(items = getMenuItems()) {
-  const categories = [...new Set(items.map((item) => (item.category || 'Khác').trim()).filter(Boolean))];
+  const existing = Array.isArray(JSON.parse(localStorage.getItem('cafeMenuCategories') || 'null')) ? JSON.parse(localStorage.getItem('cafeMenuCategories') || 'null') : [];
+  const derived = [...new Set(items.map((item) => (item.category || 'Khác').trim()).filter(Boolean))];
+  const categories = Array.from(new Set([...existing, ...derived].map((item) => String(item || '').trim()).filter(Boolean)));
+
   if (!categories.length) {
-    saveMenuCategories(['Khác']);
-    return ['Khác'];
+    return saveMenuCategories(['Khác']);
   }
 
-  saveMenuCategories(categories);
-  return categories;
+  return saveMenuCategories(categories);
 }
 
 function addCategoryGroup(categoryName) {
