@@ -1714,10 +1714,6 @@ async function init() {
     dailyRevenueBtn.addEventListener('click', loadDailyRevenueChart);
   }
 
-  const resetRevenueBtn = document.getElementById('resetRevenueBtn');
-  if (resetRevenueBtn) {
-    resetRevenueBtn.addEventListener('click', resetRevenueAndBills);
-  }
 
   const customQrUpload = document.getElementById('customQrUpload');
   if (customQrUpload) {
