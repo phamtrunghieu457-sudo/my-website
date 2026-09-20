@@ -196,7 +196,7 @@ app.get('/api/menu', async (req, res) => {
 });
 
 app.post('/api/menu', async (req, res) => {
-  const { name, price, icon } = req.body;
+  const { name, price, icon, category } = req.body;
 
   if (!name || !Number.isFinite(Number(price)) || Number(price) <= 0) {
     return res.status(400).json({ error: 'Tên và giá món không hợp lệ' });
@@ -204,11 +204,52 @@ app.post('/api/menu', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO menu_items (name, price, icon) VALUES ($1, $2, $3) RETURNING *',
-      [name, Number(price), icon || '☕']
+      'INSERT INTO menu_items (name, price, icon, category) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, Number(price), icon || '☕', category || 'Khác']
     );
 
     return res.json(result.rows[0]);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/menu/categories', async (req, res) => {
+  const { from, to } = req.body || {};
+  const source = String(from || '').trim() || 'Khác';
+  const target = String(to || '').trim() || 'Khác';
+
+  if (!source || source === target) {
+    return res.json({ success: true, updatedCount: 0, category: target });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE menu_items SET category = $1 WHERE category = $2 RETURNING *',
+      [target, source]
+    );
+
+    return res.json({ success: true, updatedCount: result.rowCount, category: target });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/menu/categories', async (req, res) => {
+  const { category, from, name } = req.body || {};
+  const target = String(category || from || name || '').trim() || 'Khác';
+
+  if (!target) {
+    return res.json({ success: true, deletedCount: 0, category: target });
+  }
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM menu_items WHERE category = $1 RETURNING *',
+      [target]
+    );
+
+    return res.json({ success: true, deletedCount: result.rowCount, category: target });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }

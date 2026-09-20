@@ -243,7 +243,7 @@ app.put('/api/menu/:id', async (req, res) => {
 });
 
 app.put('/api/menu/categories', async (req, res) => {
-  const { from, to } = req.body;
+  const { from, to } = req.body || {};
   const source = String(from || '').trim() || 'Khác';
   const target = String(to || '').trim() || 'Khác';
 
@@ -267,7 +267,7 @@ app.delete('/api/menu/categories', async (req, res) => {
   const { category, from, name } = req.body || {};
   const target = String(category || from || name || '').trim() || 'Khác';
 
-  if (!target || target === 'Khác' && !req.body) {
+  if (!target) {
     return res.json({ success: true, deletedCount: 0, category: target });
   }
 

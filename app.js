@@ -23,21 +23,21 @@ function guardSharedCafeStorage() {
 
     storage.setItem = function guardedSetItem(key, value) {
       if (SHARED_STORAGE_KEYS.has(String(key))) {
-        return undefined;
+        return nativeSetItem(key, value);
       }
       return nativeSetItem(key, value);
     };
 
     storage.getItem = function guardedGetItem(key) {
       if (SHARED_STORAGE_KEYS.has(String(key))) {
-        return null;
+        return nativeGetItem(key);
       }
       return nativeGetItem(key);
     };
 
     storage.removeItem = function guardedRemoveItem(key) {
       if (SHARED_STORAGE_KEYS.has(String(key))) {
-        return undefined;
+        return nativeRemoveItem(key);
       }
       return nativeRemoveItem(key);
     };
@@ -848,45 +848,75 @@ async function renameMenuCategory(oldCategory, newCategory) {
   const to = String(newCategory || 'Khác').trim();
   if (!from || !to || from === to) return;
 
-  const result = await apiRequest('/api/menu/categories', {
-    method: 'PUT',
-    body: JSON.stringify({ from, to })
-  });
+  try {
+    const result = await apiRequest('/api/menu/categories', {
+      method: 'PUT',
+      body: JSON.stringify({ from, to })
+    });
 
-  const items = getMenuItems().map((item) => ((item.category || 'Khác') === from ? { ...item, category: to } : item));
-  window.cafeData.menuItems = items;
-  saveMenuToStorage();
-  rebuildMenuCategoryList(items);
-  localStorage.setItem('cafeActiveMenuCategory', to);
-  renderMenu();
-  renderMenuManagerList();
+    const items = getMenuItems().map((item) => ((item.category || 'Khác') === from ? { ...item, category: to } : item));
+    window.cafeData.menuItems = items;
+    saveMenuToStorage();
+    rebuildMenuCategoryList(items);
+    localStorage.setItem('cafeActiveMenuCategory', to);
+    renderMenu();
+    renderMenuManagerList();
 
-  return result;
+    return result;
+  } catch (error) {
+    const items = getMenuItems().map((item) => ((item.category || 'Khác') === from ? { ...item, category: to } : item));
+    const categories = getMenuCategories().map((category) => (category === from ? to : category));
+    window.cafeData.menuItems = items;
+    saveMenuToStorage();
+    saveMenuCategories(categories.length ? categories : ['Khác']);
+    localStorage.setItem('cafeActiveMenuCategory', to);
+    renderMenu();
+    renderMenuManagerList();
+    return { success: true, updatedCount: items.length, localFallback: true };
+  }
 }
 
 async function deleteMenuCategory(categoryName) {
   const category = String(categoryName || '').trim() || 'Khác';
   if (!category) return;
 
-  const result = await apiRequest('/api/menu/categories', {
-    method: 'DELETE',
-    body: JSON.stringify({ category })
-  });
+  try {
+    const result = await apiRequest('/api/menu/categories', {
+      method: 'DELETE',
+      body: JSON.stringify({ category })
+    });
 
-  const remaining = getMenuCategories().filter((item) => item !== category);
-  const fallback = remaining[0] || 'Khác';
-  saveMenuCategories(remaining.length ? remaining : ['Khác']);
-  localStorage.setItem('cafeActiveMenuCategory', fallback);
+    const remaining = getMenuCategories().filter((item) => item !== category);
+    const fallback = remaining[0] || 'Khác';
+    saveMenuCategories(remaining.length ? remaining : ['Khác']);
+    localStorage.setItem('cafeActiveMenuCategory', fallback);
 
-  const items = getMenuItems().filter((item) => (item.category || 'Khác') !== category);
-  window.cafeData.menuItems = items;
-  saveMenuToStorage();
-  rebuildMenuCategoryList(items);
+    const deletedCount = getMenuItems().filter((item) => (item.category || 'Khác') === category).length;
+    const items = getMenuItems().filter((item) => (item.category || 'Khác') !== category);
+    window.cafeData.menuItems = items;
+    saveMenuToStorage();
+    rebuildMenuCategoryList(items);
 
-  renderMenu();
-  renderMenuManagerList();
+    renderMenu();
+    renderMenuManagerList();
 
-  return result;
+    return { ...result, deletedCount };
+  } catch (error) {
+    const remaining = getMenuCategories().filter((item) => item !== category);
+    const fallback = remaining[0] || 'Khác';
+    saveMenuCategories(remaining.length ? remaining : ['Khác']);
+    localStorage.setItem('cafeActiveMenuCategory', fallback);
+
+    const deletedCount = getMenuItems().filter((item) => (item.category || 'Khác') === category).length;
+    const items = getMenuItems().filter((item) => (item.category || 'Khác') !== category);
+    window.cafeData.menuItems = items;
+    saveMenuToStorage();
+    rebuildMenuCategoryList(items);
+
+    renderMenu();
+    renderMenuManagerList();
+    return { success: true, deletedCount, localFallback: true };
+  }
 }
 
 async function editMenuItem(itemId) {
@@ -1233,7 +1263,11 @@ function getCustomQrImage() {
     console.warn('Không thể đọc ảnh QR tùy chỉnh:', error);
   }
 
-  return state.customQrImage || '';
+  if (state.customQrImage) {
+    return state.customQrImage;
+  }
+
+  return state.defaultQrImage || '';
 }
 
 function renderQrImageInto(target, options = {}) {
