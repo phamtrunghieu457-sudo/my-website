@@ -479,13 +479,17 @@ function buildDailyRevenuePoints() {
 
   state.billHistory.forEach((bill) => {
     const dateKey = new Date(bill.createdAt).toISOString().slice(0, 10);
-    const current = map.get(dateKey) || 0;
-    map.set(dateKey, current + Number(bill.total || 0));
+    const current = map.get(dateKey) || { cash: 0, transfer: 0 };
+    const method = bill.paymentMethod === 'transfer' ? 'transfer' : 'cash';
+    current[method] += Number(bill.total || 0);
+    map.set(dateKey, current);
   });
 
-  return Array.from(map.entries()).map(([date, total]) => ({
+  return Array.from(map.entries()).map(([date, amounts]) => ({
     date,
-    total
+    cash: amounts.cash,
+    transfer: amounts.transfer,
+    total: amounts.cash + amounts.transfer
   })).sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
@@ -499,7 +503,8 @@ function renderDailyRevenueChart(points = []) {
     day: '2-digit',
     month: '2-digit'
   }));
-  const values = safePoints.map((point) => Number(point.total || 0));
+  const cashValues = safePoints.map((point) => Number(point.cash || 0));
+  const transferValues = safePoints.map((point) => Number(point.transfer || 0));
 
   if (window.dailyRevenueChartInstance) {
     window.dailyRevenueChartInstance.destroy();
@@ -509,19 +514,15 @@ function renderDailyRevenueChart(points = []) {
     type: 'bar',
     data: {
       labels,
-      datasets: [{
-        label: 'Doanh thu theo ngày',
-        data: values,
-        backgroundColor: 'rgba(59, 130, 246, 0.7)',
-        borderRadius: 6,
-        borderSkipped: false
-      }]
+      datasets: [{ label: 'Tiền mặt', data: cashValues, backgroundColor: 'rgba(16, 185, 129, 0.75)', borderRadius: 6, borderSkipped: false }, { label: 'Chuyển khoản', data: transferValues, backgroundColor: 'rgba(59, 130, 246, 0.75)', borderRadius: 6, borderSkipped: false }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
+        x: { stacked: true },
         y: {
+          stacked: true,
           beginAtZero: true,
           ticks: {
             callback: (value) => `${Number(value).toLocaleString('vi-VN')}đ`
@@ -529,7 +530,7 @@ function renderDailyRevenueChart(points = []) {
         }
       },
       plugins: {
-        legend: { display: false }
+        legend: { display: true, position: 'bottom' }
       }
     }
   });
@@ -546,6 +547,42 @@ async function loadDailyRevenueChart() {
   }
 
   renderDailyRevenueChart(buildDailyRevenuePoints());
+}
+
+function getPaymentSummaryFromBills(bills = state.billHistory || []) {
+  return bills.reduce((summary, bill) => {
+    const method = bill.paymentMethod === 'transfer' ? 'transfer' : 'cash';
+    const amount = Number(bill.total || 0);
+    summary.total += amount;
+    summary[method] += amount;
+    summary.billCount += 1;
+    summary[`${method}BillCount`] += 1;
+    return summary;
+  }, { total: 0, cash: 0, transfer: 0, billCount: 0, cashBillCount: 0, transferBillCount: 0 });
+}
+
+function renderPaymentSummary(summary) {
+  const safe = summary || getPaymentSummaryFromBills();
+  [['adminTotalRevenue', safe.total], ['adminCashRevenue', safe.cash], ['adminTransferRevenue', safe.transfer]].forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = formatMoney(Number(value || 0));
+  });
+  const billCountEl = document.getElementById('adminBillCount');
+  if (billCountEl) billCountEl.textContent = String(Number(safe.billCount || 0));
+  const cashCountEl = document.getElementById('adminCashBillCount');
+  if (cashCountEl) cashCountEl.textContent = `(${Number(safe.cashBillCount || 0)} bill)`;
+  const transferCountEl = document.getElementById('adminTransferBillCount');
+  if (transferCountEl) transferCountEl.textContent = `(${Number(safe.transferBillCount || 0)} bill)`;
+}
+
+async function loadDashboardData() {
+  try {
+    const data = await apiRequest('/api/bills-summary');
+    if (data?.summary) return data;
+  } catch (error) {
+    console.warn('Không thể lấy thống kê bill từ DB, dùng dữ liệu local:', error);
+  }
+  return { summary: getPaymentSummaryFromBills(), bills: state.billHistory || [] };
 }
 
 async function syncPendingBillsFromServer() {
@@ -1445,29 +1482,22 @@ async function confirmPayment() {
 }
 
 function updateBillHistory() {
-  const billHistory = state.billHistory || [];
-  const billCountEl = document.getElementById('adminBillCount');
-  if (billCountEl) billCountEl.textContent = String(billHistory.length);
-
-  const revenueEl = document.getElementById('adminTotalRevenue');
-  if (revenueEl) revenueEl.textContent = formatMoney(state.totalRevenue);
+  renderPaymentSummary(getPaymentSummaryFromBills());
 }
 
 async function openAdminDashboard() {
   const modal = document.getElementById('adminDashboardModal');
   if (!modal) return;
 
-  await syncRevenueFromServer();
-
-  const revenueEl = document.getElementById('adminTotalRevenue');
-  const billCountEl = document.getElementById('adminBillCount');
+  const dashboardData = await loadDashboardData();
+  const summary = dashboardData.summary || getPaymentSummaryFromBills();
+  const dashboardBills = Array.isArray(dashboardData.bills) ? dashboardData.bills : (state.billHistory || []);
   const listEl = document.getElementById('adminBillsList');
 
-  if (revenueEl) revenueEl.textContent = formatMoney(state.totalRevenue);
-  if (billCountEl) billCountEl.textContent = String((state.billHistory || []).length);
+  renderPaymentSummary(summary);
 
   if (listEl) {
-    const bills = state.billHistory || [];
+    const bills = dashboardBills;
     if (!bills.length) {
       listEl.innerHTML = '<div class="bill-empty">Chưa có bill nào trong hệ thống.</div>';
     } else {
@@ -1478,6 +1508,7 @@ async function openAdminDashboard() {
             <span class="bill-total">${formatMoney(order.total || 0)}</span>
           </div>
           <div style="font-size:0.8rem; color:#666; margin:8px 0;">Ngày: ${new Date(order.createdAt || Date.now()).toLocaleString('vi-VN')}</div>
+          <div style="font-size:0.8rem; color:${order.paymentMethod === 'transfer' ? '#2563eb' : '#047857'}; font-weight:700; margin:8px 0;">${order.paymentMethod === 'transfer' ? '📱 Chuyển khoản' : '💵 Tiền mặt'}</div>
           <ul class="bill-items">
             ${(order.items || []).map((item) => `
               <li class="bill-item">

@@ -467,7 +467,10 @@ app.post('/api/revenue/reset', async (req, res) => {
 app.get('/api/revenue-by-day', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') AS date, COALESCE(SUM(amount), 0) AS total
+      `SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') AS date,
+              COALESCE(SUM(amount) FILTER (WHERE method = 'cash'), 0) AS cash,
+              COALESCE(SUM(amount) FILTER (WHERE method = 'transfer'), 0) AS transfer,
+              COALESCE(SUM(amount), 0) AS total
        FROM payments
        GROUP BY created_at::date
        ORDER BY created_at::date ASC`
@@ -475,10 +478,46 @@ app.get('/api/revenue-by-day', async (req, res) => {
 
     const points = (result.rows || []).map((row) => ({
       date: row.date,
+      cash: Number(row.cash || 0),
+      transfer: Number(row.transfer || 0),
       total: Number(row.total || 0)
     }));
 
     return res.json({ points });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/bills-summary', async (req, res) => {
+  try {
+    const summaryResult = await pool.query(
+      `SELECT COUNT(DISTINCT order_id) AS "billCount",
+              COUNT(DISTINCT order_id) FILTER (WHERE method = 'cash') AS "cashBillCount",
+              COUNT(DISTINCT order_id) FILTER (WHERE method = 'transfer') AS "transferBillCount",
+              COALESCE(SUM(amount), 0) AS total,
+              COALESCE(SUM(amount) FILTER (WHERE method = 'cash'), 0) AS cash,
+              COALESCE(SUM(amount) FILTER (WHERE method = 'transfer'), 0) AS transfer
+       FROM payments`
+    );
+    const row = summaryResult.rows[0] || {};
+    const billResult = await pool.query(
+      `SELECT o.id, o.table_name, o.total, p.method, p.amount, p.created_at
+       FROM payments p JOIN orders o ON o.id = p.order_id
+       ORDER BY p.created_at DESC`
+    );
+    const bills = await Promise.all(billResult.rows.map(async (bill) => {
+      const itemsResult = await pool.query('SELECT item_id, name, icon, price, quantity, note FROM order_items WHERE order_id = $1', [bill.id]);
+      return {
+        id: Number(bill.id), tableName: bill.table_name, total: Number(bill.amount || bill.total || 0),
+        createdAt: bill.created_at, paymentMethod: bill.method,
+        items: itemsResult.rows.map((item) => ({ ...item, id: Number(item.item_id), price: Number(item.price), quantity: Number(item.quantity) }))
+      };
+    }));
+    return res.json({ summary: {
+      billCount: Number(row.billCount || 0), cashBillCount: Number(row.cashBillCount || 0), transferBillCount: Number(row.transferBillCount || 0),
+      total: Number(row.total || 0), cash: Number(row.cash || 0), transfer: Number(row.transfer || 0)
+    }, bills });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
